@@ -86,7 +86,7 @@
       "distinct_source_computers": 4,
       "distinct_destination_computers": 301
     },
-    "inspection_artifact": "outputs/lanl_task_2_1_inspection.json",
+    "inspection_artifact": "outputs/lanl_auth_inspection.json",
     "inspection_runtime_seconds": 329.2,
     "inspection_peak_memory_rss_mb": 1994.53,
     "inspection_note": "The full scan was supplied from a 16-worker, line-aligned inspection. Its aggregate totals were reconciled against daily, categorical and candidate totals in this repository; the full 58-day scan was not independently repeated."

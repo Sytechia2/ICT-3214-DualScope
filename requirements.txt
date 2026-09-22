@@ -2,8 +2,8 @@
 # retrieval and dashboard dependencies here as those components are selected.
 numpy>=1.26,<3
 pandas>=2.2,<3
+pyarrow>=17,<22
 scikit-learn>=1.5,<2
 networkx>=3.3,<4
 PyYAML>=6.0,<7
 pytest>=8,<9
-

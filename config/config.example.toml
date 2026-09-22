@@ -14,6 +14,10 @@ fixture = "data/fixtures/authentication_fixture.csv"
 dataset_manifest = "data/manifests/lanl_auth_days_01_30.json"
 acting_user_definition = "source_user"
 timestamp_unit = "dataset_relative_seconds"
+dataset_day_start = 1
+dataset_day_end = 30
+ingestion_chunk_rows = 500000
+parquet_compression = "zstd"
 
 [run]
 random_seed = 42

@@ -1,0 +1,178 @@
+{
+  "acting_user_definition": "source_user",
+  "category_counts": {
+    "authentication_orientation": {
+      "LogOff": 1,
+      "LogOn": 5,
+      "TGS": 1
+    },
+    "authentication_result": {
+      "Fail": 1,
+      "Success": 6
+    },
+    "authentication_type": {
+      "?": 1,
+      "Kerberos": 3,
+      "NTLM": 1,
+      "Negotiate": 2
+    },
+    "logon_type": {
+      "?": 1,
+      "Interactive": 2,
+      "Network": 2,
+      "RemoteInteractive": 2
+    }
+  },
+  "chunk_rows": 3,
+  "counts": {
+    "accepted_rows": 7,
+    "distinct_exact_duplicate_groups": 2,
+    "exact_duplicate_instances_beyond_first": 2,
+    "input_rows_scanned": 9,
+    "out_of_scope_rows": 0,
+    "reconciled": true,
+    "rejected_rows": 2
+  },
+  "dataset": "LANL authentication",
+  "dataset_day_formula": "((timestamp - 1) // 86400) + 1",
+  "deduplication": "none; every accepted source row is retained",
+  "format_version": 1,
+  "labels_in_detector_events": false,
+  "max_source_rows": null,
+  "ordering": {
+    "stopped_after_first_row_beyond_day_end": false,
+    "validated_non_decreasing_across_chunks": true
+  },
+  "parts": [
+    {
+      "dataset_day": 1,
+      "maximum_timestamp": 2,
+      "minimum_timestamp": 1,
+      "part": 0,
+      "path": "dataset_day=01/part-000000.parquet",
+      "rows": 3
+    },
+    {
+      "dataset_day": 1,
+      "maximum_timestamp": 86400,
+      "minimum_timestamp": 3,
+      "part": 1,
+      "path": "dataset_day=01/part-000001.parquet",
+      "rows": 2
+    },
+    {
+      "dataset_day": 2,
+      "maximum_timestamp": 86401,
+      "minimum_timestamp": 86401,
+      "part": 0,
+      "path": "dataset_day=02/part-000000.parquet",
+      "rows": 1
+    },
+    {
+      "dataset_day": 2,
+      "maximum_timestamp": 86401,
+      "minimum_timestamp": 86401,
+      "part": 1,
+      "path": "dataset_day=02/part-000001.parquet",
+      "rows": 1
+    }
+  ],
+  "rejection_reasons": {
+    "field_count": 1,
+    "invalid_timestamp": 1
+  },
+  "rows_per_day": {
+    "1": 5,
+    "2": 2
+  },
+  "schema": [
+    {
+      "name": "dataset_day",
+      "storage": "hive_partition",
+      "type": "int32"
+    },
+    {
+      "name": "timestamp",
+      "storage": "parquet",
+      "type": "int64"
+    },
+    {
+      "name": "source_user",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "destination_user",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "source_computer",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "destination_computer",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "authentication_type",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "logon_type",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "authentication_orientation",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "authentication_result",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "acting_user",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "exact_duplicate_ordinal",
+      "storage": "parquet",
+      "type": "int32"
+    },
+    {
+      "name": "source_line",
+      "storage": "parquet",
+      "type": "int64"
+    },
+    {
+      "name": "source_reference",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "raw_record",
+      "storage": "parquet",
+      "type": "string"
+    }
+  ],
+  "selection": {
+    "day_end_inclusive": 2,
+    "day_start_inclusive": 1
+  },
+  "source_file": "data\\fixtures\\lanl_auth_sample.txt",
+  "source_reference_format": "auth.txt:<source_line>",
+  "storage": {
+    "compression": "zstd",
+    "format": "parquet",
+    "part_order": "six-digit sequence in source order",
+    "partitioning": "dataset_day"
+  },
+  "timestamp_definition": "positive dataset-relative seconds"
+}

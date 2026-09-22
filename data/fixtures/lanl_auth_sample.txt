@@ -1,0 +1,9 @@
+1,U1@DOM1,U1@DOM1,C1,C1,Negotiate,Interactive,LogOn,Success
+1,U1@DOM1,U1@DOM1,C1,C1,Negotiate,Interactive,LogOn,Success
+2,U1@DOM1,U2@DOM1,C1,C2,?,Network,TGS,Success
+3,U2@DOM1,U3@DOM1,C2,C3,NTLM,Network,LogOn,Fail
+86400,U3@DOM1,U3@DOM1,C3,C3,Kerberos,?,LogOff,Success
+86401,U3@DOM1,U4@DOM1,C3,C4,Kerberos,RemoteInteractive,LogOn,Success
+86401,U3@DOM1,U4@DOM1,C3,C4,Kerberos,RemoteInteractive,LogOn,Success
+bad,U5@DOM1,U6@DOM1,C5,C6,NTLM,Network,LogOn,Success
+86402,U5@DOM1,U6@DOM1,C5

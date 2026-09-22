@@ -1,0 +1,84 @@
+{
+  "counts": {
+    "accepted_rows": 2,
+    "input_rows_scanned": 2,
+    "out_of_scope_rows": 0,
+    "reconciled": true,
+    "rejected_rows": 0
+  },
+  "dataset": "LANL red-team labels",
+  "format_version": 1,
+  "parts": [
+    {
+      "dataset_day": 1,
+      "maximum_timestamp": 2,
+      "minimum_timestamp": 2,
+      "part": 0,
+      "path": "dataset_day=01/part-000000.parquet",
+      "rows": 1
+    },
+    {
+      "dataset_day": 2,
+      "maximum_timestamp": 86401,
+      "minimum_timestamp": 86401,
+      "part": 0,
+      "path": "dataset_day=02/part-000000.parquet",
+      "rows": 1
+    }
+  ],
+  "rejection_reasons": {},
+  "rows_per_day": {
+    "1": 1,
+    "2": 1
+  },
+  "schema": [
+    {
+      "name": "dataset_day",
+      "storage": "hive_partition",
+      "type": "int32"
+    },
+    {
+      "name": "timestamp",
+      "storage": "parquet",
+      "type": "int64"
+    },
+    {
+      "name": "user",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "source_computer",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "destination_computer",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "source_line",
+      "storage": "parquet",
+      "type": "int64"
+    },
+    {
+      "name": "source_reference",
+      "storage": "parquet",
+      "type": "string"
+    },
+    {
+      "name": "raw_record",
+      "storage": "parquet",
+      "type": "string"
+    }
+  ],
+  "separate_from_detector_inputs": true,
+  "source_file": "data\\fixtures\\lanl_redteam_sample.txt",
+  "source_reference_format": "redteam.txt:<source_line>",
+  "storage": {
+    "compression": "zstd",
+    "format": "parquet",
+    "partitioning": "dataset_day"
+  }
+}

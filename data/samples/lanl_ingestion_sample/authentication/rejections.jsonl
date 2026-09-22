@@ -1,0 +1,2 @@
+{"source_line": 8, "reason": "invalid_timestamp", "raw_record": "bad,U5@DOM1,U6@DOM1,C5,C6,NTLM,Network,LogOn,Success"}
+{"source_line": 9, "reason": "field_count", "raw_record": "86402,U5@DOM1,U6@DOM1,C5"}
