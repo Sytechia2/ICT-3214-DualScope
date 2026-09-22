@@ -1,0 +1,39 @@
+{
+  "policy_version": "1.0.0",
+  "policy_name": "lanl_chronological_splits_v1",
+  "dataset_day_formula": "((timestamp - 1) // 86400) + 1",
+  "dataset_day_start_inclusive": 1,
+  "dataset_day_end_inclusive": 30,
+  "timestamp_start_inclusive": 1,
+  "timestamp_end_exclusive": 2592001,
+  "graph_lookback_seconds": 86400,
+  "sequence_hour_seconds": 3600,
+  "exclusion_policy": "train_redteam_users_source_or_destination",
+  "exclusion_window": "entire_training_interval",
+  "splits": {
+    "train": {
+      "name": "train",
+      "dataset_day_start": 1,
+      "dataset_day_end": 7,
+      "timestamp_start": 1,
+      "timestamp_end": 604801,
+      "description": "Initial baseline and early activity period for normal model fitting and vocabulary/scaling learning with red-team user exclusions."
+    },
+    "validation": {
+      "name": "validation",
+      "dataset_day_start": 8,
+      "dataset_day_end": 16,
+      "timestamp_start": 604801,
+      "timestamp_end": 1382401,
+      "description": "Intermediate period containing major red-team lateral movement campaigns for hyperparameter tuning, score calibration, and alert threshold selection."
+    },
+    "test": {
+      "name": "test",
+      "dataset_day_start": 17,
+      "dataset_day_end": 30,
+      "timestamp_start": 1382401,
+      "timestamp_end": 2592001,
+      "description": "Held-out final evaluation period evaluated using frozen model weights and calibration parameters."
+    }
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "manifest_version": 1,
+  "task": "2.3 \u2014 Create chronological data splits",
+  "split_policy_id": "lanl_chronological_splits_v1",
+  "created_date": "2026-09-22",
+  "config_fingerprint": "c5e3d5d89c0324b24ca79f391abfec197f47f89fd9ddb3f7652f4fe5a1284af9",
+  "config_reference": "config/lanl_splits.json",
+  "source_dataset_reference": "data/processed/lanl_auth_days_01_30/authentication",
+  "selection_manifest_reference": "data/manifests/lanl_auth_days_01_30.json",
+  "dataset_scope": {
+    "dataset_day_start_inclusive": 1,
+    "dataset_day_end_inclusive": 30,
+    "timestamp_start_inclusive": 1,
+    "timestamp_end_exclusive": 2592001,
+    "total_authentication_events": 508854306,
+    "total_red_team_rows": 749,
+    "total_unique_red_team_labels": 715
+  },
+  "splits": {
+    "train": {
+      "name": "train",
+      "dataset_day_start": 1,
+      "dataset_day_end": 7,
+      "timestamp_start": 1,
+      "timestamp_end": 604801,
+      "duration_seconds": 604800,
+      "description": "Initial baseline and early activity period for normal model fitting and vocabulary/scaling learning with red-team user exclusions.",
+      "authentication_events": 113699496,
+      "percentage_of_total_events": 22.3442,
+      "label_rows": 49,
+      "percentage_of_label_rows": 6.5421,
+      "unique_labels": 49,
+      "duplicate_label_rows": 0,
+      "user_hour_positive_units": 23,
+      "distinct_labelled_users": 7,
+      "distinct_labelled_source_computers": 3,
+      "distinct_labelled_destination_computers": 23,
+      "labelled_days": [
+        2,
+        3,
+        6,
+        7
+      ],
+      "graph_scoring_eligibility": {
+        "available": 97958544,
+        "insufficient_history": 15740952,
+        "out_of_bounds": 0
+      },
+      "excluded_training_events": 32659,
+      "eligible_training_events": 113666837,
+      "training_eligibility_percentage": 99.9713
+    },
+    "validation": {
+      "name": "validation",
+      "dataset_day_start": 8,
+      "dataset_day_end": 16,
+      "timestamp_start": 604801,
+      "timestamp_end": 1382401,
+      "duration_seconds": 777600,
+      "description": "Intermediate period containing major red-team lateral movement campaigns for hyperparameter tuning, score calibration, and alert threshold selection.",
+      "authentication_events": 164299768,
+      "percentage_of_total_events": 32.2882,
+      "label_rows": 640,
+      "percentage_of_label_rows": 85.4473,
+      "unique_labels": 614,
+      "duplicate_label_rows": 26,
+      "user_hour_positive_units": 220,
+      "distinct_labelled_users": 97,
+      "distinct_labelled_source_computers": 3,
+      "distinct_labelled_destination_computers": 279,
+      "labelled_days": [
+        8,
+        9,
+        10,
+        13,
+        14,
+        15,
+        16
+      ],
+      "graph_scoring_eligibility": {
+        "available": 164299768,
+        "insufficient_history": 0,
+        "out_of_bounds": 0
+      }
+    },
+    "test": {
+      "name": "test",
+      "dataset_day_start": 17,
+      "dataset_day_end": 30,
+      "timestamp_start": 1382401,
+      "timestamp_end": 2592001,
+      "duration_seconds": 1209600,
+      "description": "Held-out final evaluation period evaluated using frozen model weights and calibration parameters.",
+      "authentication_events": 230855042,
+      "percentage_of_total_events": 45.3676,
+      "label_rows": 60,
+      "percentage_of_label_rows": 8.0107,
+      "unique_labels": 52,
+      "duplicate_label_rows": 8,
+      "user_hour_positive_units": 39,
+      "distinct_labelled_users": 26,
+      "distinct_labelled_source_computers": 2,
+      "distinct_labelled_destination_computers": 40,
+      "labelled_days": [
+        21,
+        22,
+        23,
+        27,
+        28,
+        29,
+        30
+      ],
+      "graph_scoring_eligibility": {
+        "available": 230855042,
+        "insufficient_history": 0,
+        "out_of_bounds": 0
+      }
+    }
+  },
+  "training_exclusions": {
+    "exclusion_policy": "train_redteam_users_source_or_destination",
+    "exclusion_window": "entire_training_interval",
+    "excluded_users_count": 7,
+    "excluded_users": [
+      "U1723@DOM1",
+      "U6115@DOM1",
+      "U620@DOM1",
+      "U636@DOM1",
+      "U737@DOM1",
+      "U748@DOM1",
+      "U825@DOM1"
+    ],
+    "training_total_events": 113699496,
+    "excluded_events": 32659,
+    "eligible_events": 113666837,
+    "eligibility_percentage": 99.9713,
+    "eligibility_rule": "An event is eligible for model fitting, learned vocabulary construction, and numeric scaling if and only if neither source_user nor destination_user is in excluded_users.",
+    "benign_disclaimer": "Eligible training data is not guaranteed benign. Unlabelled authentication activity is not proven benign and may contain undetected lateral movement, routine administrative activity, or unlabelled anomalous behaviour.",
+    "implementation_note": "Future sequence and graph builders must not reintroduce excluded events into model fitting samples."
+  },
+  "graph_warm_up_policy": {
+    "lookback_seconds": 86400,
+    "first_scorable_timestamp": 86401,
+    "insufficient_history_status": "insufficient_history",
+    "scoring_status_counts": {
+      "available": 493113354,
+      "insufficient_history": 15740952,
+      "out_of_bounds": 0
+    },
+    "by_split": {
+      "train": {
+        "available": 97958544,
+        "insufficient_history": 15740952,
+        "out_of_bounds": 0
+      },
+      "validation": {
+        "available": 164299768,
+        "insufficient_history": 0,
+        "out_of_bounds": 0
+      },
+      "test": {
+        "available": 230855042,
+        "insufficient_history": 0,
+        "out_of_bounds": 0
+      }
+    },
+    "activity_disclaimer": "Time coverage does not guarantee sufficient user or host activity. Downstream graph models must handle unscorable or low-degree entities explicitly."
+  },
+  "sequence_policy": {
+    "hour_seconds": 3600,
+    "hour_origin": 1,
+    "hour_start_formula": "1 + ((timestamp - 1) // 3600) * 3600",
+    "boundary_constraint": "Sequence target windows must stay strictly within one assigned split and one dataset hour.",
+    "unscorable_candidate_tracking": {
+      "status": "contract_defined_not_materialized",
+      "implementation_task": "3.1",
+      "contract_class": "dualscope.splits.SequenceCandidateRejectionTracker",
+      "rejection_reasons": [
+        "split_boundary_violation",
+        "hour_boundary_violation",
+        "insufficient_history",
+        "out_of_bounds"
+      ],
+      "policy_note": "Sequence instances are not materialized until Task 3.1. Downstream sequence builders must use SequenceCandidateRejectionTracker to record rejected candidate instances rather than silently dropping them."
+    }
+  },
+  "replay_policy": {
+    "ordering": "Ascending (timestamp, source_line)",
+    "replay_scope": "Default replay retains all observed events up to the split exclusive end, including training exclusions, so cumulative features initialize correctly.",
+    "frozen_inference": "Model weights, learned preprocessing, and thresholds remain strictly frozen during validation and test inference."
+  },
+  "label_matching_provenance": {
+    "source_manifest": "data/manifests/lanl_auth_days_01_30.json",
+    "provenance_note": "Dynamically aggregated per split from Task 2.1 selection manifest daily coverage.",
+    "matched_unique_labels_total": 701,
+    "unmatched_unique_labels_total": 14,
+    "matched_authentication_rows_total": 702,
+    "unmatched_labels_by_day": {
+      "9": 12,
+      "13": 2
+    },
+    "unmatched_labels_split_assignment": [
+      "validation"
+    ],
+    "split_matching_breakdown": {
+      "train": {
+        "matched_unique_labels": 49,
+        "unmatched_unique_labels": 0,
+        "match_coverage_percentage": 100.0
+      },
+      "validation": {
+        "matched_unique_labels": 600,
+        "unmatched_unique_labels": 14,
+        "match_coverage_percentage": 97.7199
+      },
+      "test": {
+        "matched_unique_labels": 52,
+        "unmatched_unique_labels": 0,
+        "match_coverage_percentage": 100.0
+      }
+    }
+  },
+  "evaluation_protocol_note": "Treatment of the 14 unmatched labels is deferred to the Task 9.1 evaluation protocol. They are retained in the label source and must not be silently discarded.",
+  "reconciliation": {
+    "all_reconciled": true,
+    "event_counts_reconciled": true,
+    "label_counts_reconciled": true,
+    "training_eligibility_reconciled": true
+  }
+}
