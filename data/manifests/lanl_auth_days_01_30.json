@@ -1,0 +1,243 @@
+{
+  "manifest_version": 1,
+  "task": "2.1 — Inspect and select LANL records",
+  "selection_id": "lanl-auth-days-01-30-v1",
+  "created_date": "2026-09-22",
+  "official_dataset": {
+    "title": "Comprehensive, Multi-Source Cyber-Security Events",
+    "publisher": "Los Alamos National Laboratory",
+    "official_url": "https://csr.lanl.gov/data/cyber1/",
+    "doi": "10.17021/1179829",
+    "duration_days": 58,
+    "timestamp_definition": "Dataset-relative seconds beginning at epoch 1, with one-second resolution.",
+    "official_label_description": "redteam.txt contains specific events taken from the authentication data that present known red-team compromise events."
+  },
+  "sources": {
+    "authentication": {
+      "archive_file_name": "auth.txt.gz",
+      "archive_size_bytes": 7626505167,
+      "inspected_file_name": "auth.txt",
+      "inspected_size_bytes": 73413019178,
+      "sha256": null,
+      "sha256_status": "Omitted because the supplied parallel inspection did not calculate a single ordered digest; exact compressed and extracted sizes are recorded.",
+      "fields": [
+        "time",
+        "source_user@domain",
+        "destination_user@domain",
+        "source_computer",
+        "destination_computer",
+        "authentication_type",
+        "logon_type",
+        "authentication_orientation",
+        "success/failure"
+      ]
+    },
+    "red_team_labels": {
+      "archive_file_name": "redteam.txt.gz",
+      "archive_size_bytes": 4858,
+      "archive_sha256": "e8ffba5383035389b0de67ccbe8ec61ba10d3cb4467e754cb9f5188b3d7a4aff",
+      "inspected_file_name": "redteam.txt",
+      "inspected_size_bytes": 22986,
+      "inspected_sha256": "6bbc0c7dff64e476efb08fef260822b058fd09d44d17ec488a16e80474d1e532",
+      "fields": [
+        "time",
+        "user@domain",
+        "source_computer",
+        "destination_computer"
+      ]
+    },
+    "excluded_optional_sources": [
+      "proc.txt.gz",
+      "flows.txt.gz",
+      "dns.txt.gz"
+    ]
+  },
+  "full_source_inspection": {
+    "authentication": {
+      "records": 1051430459,
+      "valid_records": 1051430459,
+      "malformed_records": 0,
+      "invalid_timestamps": 0,
+      "minimum_timestamp": 1,
+      "maximum_timestamp": 5011199,
+      "minimum_dataset_day": 1,
+      "maximum_dataset_day": 58,
+      "timestamp_order_inversions": 0,
+      "success_records": 1038590151,
+      "failure_records": 12840308,
+      "distinct_source_users": 80553,
+      "distinct_destination_users": 98563,
+      "distinct_source_computers": 16230,
+      "distinct_destination_computers": 15895
+    },
+    "red_team": {
+      "records": 749,
+      "unique_records": 715,
+      "duplicate_instances_beyond_first": 34,
+      "distinct_duplicated_records": 12,
+      "malformed_records": 0,
+      "invalid_timestamps": 0,
+      "minimum_timestamp": 150885,
+      "maximum_timestamp": 2557047,
+      "minimum_dataset_day": 2,
+      "maximum_dataset_day": 30,
+      "timestamp_order_inversions": 0,
+      "distinct_users": 104,
+      "distinct_source_computers": 4,
+      "distinct_destination_computers": 301
+    },
+    "inspection_artifact": "outputs/lanl_task_2_1_inspection.json",
+    "inspection_runtime_seconds": 329.2,
+    "inspection_peak_memory_rss_mb": 1994.53,
+    "inspection_note": "The full scan was supplied from a 16-worker, line-aligned inspection. Its aggregate totals were reconciled against daily, categorical and candidate totals in this repository; the full 58-day scan was not independently repeated."
+  },
+  "selection": {
+    "status": "selected",
+    "source": "authentication",
+    "dataset_day_formula": "((timestamp - 1) // 86400) + 1",
+    "dataset_day_start_inclusive": 1,
+    "dataset_day_end_inclusive": 30,
+    "timestamp_start_inclusive": 1,
+    "timestamp_end_exclusive": 2592001,
+    "record_predicate": "1 <= timestamp < 2592001",
+    "entity_filter": null,
+    "entity_filter_description": "No user or computer filter. Retain all authentication records and identities occurring in the selected time range.",
+    "authentication_records": 508854306,
+    "uncompressed_authentication_bytes": 34914783768,
+    "percentage_of_full_authentication_records": 48.3964,
+    "distinct_source_users": 72751,
+    "distinct_destination_users": 89587,
+    "distinct_source_computers": 15011,
+    "distinct_destination_computers": 14540,
+    "red_team_records": 749,
+    "unique_red_team_records": 715,
+    "percentage_of_red_team_records": 100.0,
+    "percentage_of_unique_red_team_records": 100.0,
+    "labelled_dataset_days": [
+      2,
+      3,
+      6,
+      7,
+      8,
+      9,
+      10,
+      13,
+      14,
+      15,
+      16,
+      21,
+      22,
+      23,
+      27,
+      28,
+      29,
+      30
+    ],
+    "labelled_dataset_day_count": 18,
+    "distinct_labelled_users": 104,
+    "distinct_labelled_source_computers": 4,
+    "distinct_labelled_destination_computers": 301,
+    "authentication_rows_exactly_matching_known_labels": 702,
+    "authentication_rows_not_exactly_matching_known_labels": 508853604,
+    "unlabelled_activity_definition": "Authentication rows not exactly matched to a known red-team record. These records are not proven benign."
+  },
+  "red_team_authentication_matching": {
+    "source_user_match_key": [
+      "time",
+      "source_user@domain",
+      "source_computer",
+      "destination_computer"
+    ],
+    "destination_user_match_key": [
+      "time",
+      "destination_user@domain",
+      "source_computer",
+      "destination_computer"
+    ],
+    "matched_unique_labels": 701,
+    "unmatched_unique_labels": 14,
+    "ambiguous_unique_labels": 0,
+    "matched_label_rows_including_duplicates": 735,
+    "unmatched_label_rows": 14,
+    "unique_label_match_coverage_percentage": 98.042,
+    "label_row_match_coverage_percentage": 98.1308,
+    "matched_authentication_rows": 702,
+    "both_user_roles_match_unique_labels": 701,
+    "both_user_roles_match_explanation": "For every matched label, source_user@domain and destination_user@domain in the matching authentication row were equal to the red-team user.",
+    "duplicate_authentication_match_count": 1,
+    "unmatched_label_days": {
+      "9": 12,
+      "13": 2
+    },
+    "unmatched_note": "Fourteen unique label records had no authentication row matching either user-role key. Keep them in the separate label source and report their lack of event-level match; do not silently discard or fabricate authentication events."
+  },
+  "daily_coverage": [
+    {"day": 1, "authentication_records": 15740952, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 2, "authentication_records": 17562370, "label_rows": 10, "unique_labels": 10, "matched_unique_labels": 10, "unmatched_unique_labels": 0},
+    {"day": 3, "authentication_records": 15585920, "label_rows": 15, "unique_labels": 15, "matched_unique_labels": 15, "unmatched_unique_labels": 0},
+    {"day": 4, "authentication_records": 13473144, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 5, "authentication_records": 13398091, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 6, "authentication_records": 18557390, "label_rows": 21, "unique_labels": 21, "matched_unique_labels": 21, "unmatched_unique_labels": 0},
+    {"day": 7, "authentication_records": 19381629, "label_rows": 3, "unique_labels": 3, "matched_unique_labels": 3, "unmatched_unique_labels": 0},
+    {"day": 8, "authentication_records": 19394277, "label_rows": 1, "unique_labels": 1, "matched_unique_labels": 1, "unmatched_unique_labels": 0},
+    {"day": 9, "authentication_records": 19374681, "label_rows": 273, "unique_labels": 273, "matched_unique_labels": 261, "unmatched_unique_labels": 12},
+    {"day": 10, "authentication_records": 18141675, "label_rows": 15, "unique_labels": 5, "matched_unique_labels": 5, "unmatched_unique_labels": 0},
+    {"day": 11, "authentication_records": 14170706, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 12, "authentication_records": 14012614, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 13, "authentication_records": 19870851, "label_rows": 209, "unique_labels": 209, "matched_unique_labels": 207, "unmatched_unique_labels": 2},
+    {"day": 14, "authentication_records": 20807328, "label_rows": 81, "unique_labels": 75, "matched_unique_labels": 75, "unmatched_unique_labels": 0},
+    {"day": 15, "authentication_records": 20105310, "label_rows": 35, "unique_labels": 25, "matched_unique_labels": 25, "unmatched_unique_labels": 0},
+    {"day": 16, "authentication_records": 18422326, "label_rows": 26, "unique_labels": 26, "matched_unique_labels": 26, "unmatched_unique_labels": 0},
+    {"day": 17, "authentication_records": 15886632, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 18, "authentication_records": 13422624, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 19, "authentication_records": 13208802, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 20, "authentication_records": 13138834, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 21, "authentication_records": 18258787, "label_rows": 1, "unique_labels": 1, "matched_unique_labels": 1, "unmatched_unique_labels": 0},
+    {"day": 22, "authentication_records": 18960857, "label_rows": 4, "unique_labels": 4, "matched_unique_labels": 4, "unmatched_unique_labels": 0},
+    {"day": 23, "authentication_records": 17984194, "label_rows": 1, "unique_labels": 1, "matched_unique_labels": 1, "unmatched_unique_labels": 0},
+    {"day": 24, "authentication_records": 16506762, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 25, "authentication_records": 13828869, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 26, "authentication_records": 13568099, "label_rows": 0, "unique_labels": 0, "matched_unique_labels": 0, "unmatched_unique_labels": 0},
+    {"day": 27, "authentication_records": 18557564, "label_rows": 26, "unique_labels": 26, "matched_unique_labels": 26, "unmatched_unique_labels": 0},
+    {"day": 28, "authentication_records": 19484717, "label_rows": 9, "unique_labels": 9, "matched_unique_labels": 9, "unmatched_unique_labels": 0},
+    {"day": 29, "authentication_records": 19065609, "label_rows": 3, "unique_labels": 2, "matched_unique_labels": 2, "unmatched_unique_labels": 0},
+    {"day": 30, "authentication_records": 18982692, "label_rows": 16, "unique_labels": 9, "matched_unique_labels": 9, "unmatched_unique_labels": 0}
+  ],
+  "candidate_comparison": [
+    {"days_inclusive": "1-16", "authentication_records": 277999264, "label_rows": 689, "unique_labels": 663, "unique_label_coverage_percentage": 92.7273},
+    {"days_inclusive": "1-23", "authentication_records": 388859994, "label_rows": 695, "unique_labels": 669, "unique_label_coverage_percentage": 93.5664},
+    {"days_inclusive": "1-30", "authentication_records": 508854306, "label_rows": 749, "unique_labels": 715, "unique_label_coverage_percentage": 100.0},
+    {"days_inclusive": "1-58", "authentication_records": 1051430459, "label_rows": 749, "unique_labels": 715, "unique_label_coverage_percentage": 100.0}
+  ],
+  "selection_rationale": [
+    "Days 1-30 is the shortest inspected contiguous candidate that retains every supplied red-team row and every unique red-team label.",
+    "The range retains whole-network activity with no user, host, attack-user or attack-hour filter.",
+    "The range retains later labelled activity on Days 21-23 and 27-30 for subsequent chronological split design.",
+    "Compared with all 58 days, the range removes 542576153 authentication rows while retaining all supplied labels."
+  ],
+  "biases_and_limitations": [
+    "The end boundary is label-informed because it stops after the final supplied red-team day. Evaluation on this selection will not measure behaviour during label-free Days 31-58 and will have a different apparent label prevalence from the full source.",
+    "Red-team labels identify known compromise events only. Unlabelled authentication activity is not proven benign and may contain malicious or anomalous behaviour.",
+    "Day 1 contains no supplied red-team labels, but that absence does not establish that it is uncompromised or benign.",
+    "Labels are strongly concentrated on Days 9 and 13 and originate from only four labelled source computers; aggregate results may be dominated by those campaigns.",
+    "Thirty-four repeated red-team rows and one label matching two authentication rows require an explicit evaluation counting rule in Task 2.3.",
+    "Fourteen unique supplied labels do not exactly match an authentication row under either tested user-role key.",
+    "The selected source still contains more than 508 million authentication records; Task 2.2 must use bounded-memory processing and record measured resource use."
+  ],
+  "downstream_constraints": {
+    "labels_separate_from_detector_inputs": true,
+    "preserve_source_and_destination_identities": true,
+    "preserve_dataset_relative_timestamps": true,
+    "train_validation_test_boundaries_defined": false,
+    "split_note": "Task 2.3 will define chronological training, validation, test, exclusion and warm-up boundaries with Member 4.",
+    "optional_source_integration_selected": false
+  },
+  "reproduction": {
+    "canonical_selection_rule": "Stream auth.txt and retain every nine-field record satisfying 1 <= time < 2592001. Retain redteam.txt separately without using its labels as detector input.",
+    "selected_entity_count_command": "python scripts/inspect_lanl_subset.py --auth <dataset-directory>/auth.txt --byte-limit 34914783768 --start-timestamp 1 --end-timestamp-exclusive 2592001 --workers 16 --output outputs/lanl_days_1_30_entities.json",
+    "byte_limit_note": "The byte limit is the observed end-of-Day-30 line boundary and is only an inspection optimization. The timestamp predicate is the canonical selection rule.",
+    "selected_count_reproduced": true,
+    "selected_count_reproduction_runtime_seconds": 121.984,
+    "full_scan_independently_repeated": false
+  }
+}

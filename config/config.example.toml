@@ -1,0 +1,24 @@
+# Copy this file to config/config.toml for a local run.
+# config/config.toml is ignored because it may contain machine-specific paths
+# or service settings. Never place credentials in this file or in Git.
+
+[paths]
+raw_data = "data/raw"
+processed_data = "data/processed"
+models = "models"
+outputs = "outputs"
+logs = "logs"
+
+[data]
+fixture = "data/fixtures/authentication_fixture.csv"
+dataset_manifest = "data/manifests/lanl_auth_days_01_30.json"
+acting_user_definition = "source_user"
+timestamp_unit = "dataset_relative_seconds"
+
+[run]
+random_seed = 42
+run_id = "local-smoke"
+
+[services]
+# Add endpoint names or environment-variable references only. Do not add keys.
+llm_api_key_env = "DUALSCOPE_LLM_API_KEY"

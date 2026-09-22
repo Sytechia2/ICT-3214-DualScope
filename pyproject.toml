@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dualscope"
+version = "0.1.0"
+description = "Multi-timescale intrusion detection using sequence and graph-based behavioural analysis"
+requires-python = ">=3.11,<3.14"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

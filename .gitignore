@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Local data and generated artifacts
+data/raw/*
+data/processed/*
+models/*
+outputs/*
+logs/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!models/.gitkeep
+!outputs/.gitkeep
+!logs/.gitkeep
+
+# IDE and operating-system files
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Secrets and local configuration
+config/config.toml
+config/*.local.toml
+*.pem
+*.key
+

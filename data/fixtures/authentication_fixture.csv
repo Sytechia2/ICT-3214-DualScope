@@ -1,0 +1,8 @@
+event_id,timestamp,source_user,destination_user,source_host,destination_host,result,protocol
+evt-001,1000,alice,svc_backup,workstation-01,server-01,success,kerberos
+evt-002,1000,alice,svc_backup,workstation-01,server-01,success,kerberos
+evt-003,1015,alice,svc_backup,workstation-01,server-02,failure,kerberos
+evt-004,1020,alice,svc_backup,workstation-01,server-02,success,kerberos
+evt-005,1080,bob,svc_admin,workstation-02,server-01,failure,ntlm
+evt-006,1090,bob,svc_admin,workstation-02,server-03,success,ntlm
+
