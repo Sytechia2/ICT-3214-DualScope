@@ -1,0 +1,62 @@
+{
+  "task": "2.4 \u2014 Shared historical features",
+  "timestamp": "2026-09-22T17:08:40Z",
+  "feature_version": "1.0.0",
+  "feature_config_fingerprint": "f0b21ace8ea6f652d647b1c694f1b6cd254a51ee1d09fb1925a69f384c0009df",
+  "split_policy_fingerprint": "b30b9f9f61a8bfa93f17aed667aaebf3a576797bcfd4557a8d07aa903ce6fb54",
+  "mode": "pilot",
+  "is_production": false,
+  "inputs": {
+    "events_path": "data\\samples\\lanl_ingestion_sample\\authentication\\events",
+    "splits_config_path": "data\\fixtures\\fixture_splits.json",
+    "splits_manifest_path": "data\\manifests\\fixture_splits_v1.json",
+    "feature_config_path": "data\\fixtures\\fixture_features.json",
+    "excluded_users": [
+      "U2@DOM1"
+    ]
+  },
+  "outputs": {
+    "output_directory": "data\\samples\\lanl_features_sample",
+    "raw_events_directory": "data\\samples\\lanl_features_sample\\raw\\events",
+    "transformed_events_directory": "data\\samples\\lanl_features_sample\\transformed\\events",
+    "preprocessing_path": "data\\samples\\lanl_features_sample\\preprocessing.json"
+  },
+  "counts": {
+    "raw_events_written": 7,
+    "transformed_events_written": 7,
+    "reconciled": true,
+    "fitting_row_counts": {
+      "total_scanned_rows": 7,
+      "training_scanned_rows": 7,
+      "training_eligible_fitted_rows": 5,
+      "training_excluded_skipped_rows": 2,
+      "validation_scanned_rows": 0,
+      "test_scanned_rows": 0
+    }
+  },
+  "performance": {
+    "total_wall_time_seconds": 0.19,
+    "pass1_seconds": 0.08,
+    "pass2_seconds": 0.1,
+    "pass1_throughput_events_per_sec": 89.1,
+    "pass2_throughput_events_per_sec": 68.1,
+    "memory_breakdown": {
+      "total_events_processed": 7,
+      "distinct_users_tracked": 3,
+      "distinct_computers_tracked": 4,
+      "active_rolling_users": 3,
+      "rolling_1h_events": 3,
+      "rolling_24h_events": 7,
+      "timeline_1h_entries": 2,
+      "timeline_24h_entries": 5,
+      "timeline_memory_mb": 0.002,
+      "rolling_history_memory_mb": 0.007,
+      "distinct_user_destinations_ever_seen": 5,
+      "distinct_host_connections_ever_seen": 5,
+      "ever_seen_sets_memory_mb": 0.001,
+      "entity_tables_memory_mb": 0.001,
+      "total_internal_state_memory_mb": 0.009,
+      "process_rss_mb": null
+    }
+  }
+}

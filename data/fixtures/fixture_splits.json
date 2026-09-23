@@ -1,0 +1,39 @@
+{
+  "policy_version": "1.0.0",
+  "policy_name": "lanl_fixture_splits_v1",
+  "dataset_day_formula": "((timestamp - 1) // 86400) + 1",
+  "dataset_day_start_inclusive": 1,
+  "dataset_day_end_inclusive": 4,
+  "timestamp_start_inclusive": 1,
+  "timestamp_end_exclusive": 345601,
+  "graph_lookback_seconds": 86400,
+  "sequence_hour_seconds": 3600,
+  "exclusion_policy": "train_redteam_users_source_or_destination",
+  "exclusion_window": "entire_training_interval",
+  "splits": {
+    "train": {
+      "name": "train",
+      "dataset_day_start": 1,
+      "dataset_day_end": 2,
+      "timestamp_start": 1,
+      "timestamp_end": 172801,
+      "description": "Fixture training period."
+    },
+    "validation": {
+      "name": "validation",
+      "dataset_day_start": 3,
+      "dataset_day_end": 3,
+      "timestamp_start": 172801,
+      "timestamp_end": 259201,
+      "description": "Fixture validation period."
+    },
+    "test": {
+      "name": "test",
+      "dataset_day_start": 4,
+      "dataset_day_end": 4,
+      "timestamp_start": 259201,
+      "timestamp_end": 345601,
+      "description": "Fixture test period."
+    }
+  }
+}

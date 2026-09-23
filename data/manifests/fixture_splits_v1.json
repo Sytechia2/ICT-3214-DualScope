@@ -1,0 +1,30 @@
+{
+  "manifest_version": 1,
+  "task": "2.3 — Create chronological data splits (Fixture)",
+  "split_policy_id": "lanl_fixture_splits_v1",
+  "config_fingerprint": "b30b9f9f61a8bfa93f17aed667aaebf3a576797bcfd4557a8d07aa903ce6fb54",
+  "created_date": "2026-09-22",
+  "config_reference": "data/fixtures/fixture_splits.json",
+  "source_dataset_reference": "data/samples/lanl_ingestion_sample/authentication/events",
+  "dataset_scope": {
+    "dataset_day_start_inclusive": 1,
+    "dataset_day_end_inclusive": 4,
+    "timestamp_start_inclusive": 1,
+    "timestamp_end_exclusive": 345601,
+    "total_authentication_events": 7,
+    "total_red_team_rows": 2,
+    "total_unique_red_team_labels": 2
+  },
+  "training_exclusions": {
+    "exclusion_policy": "train_redteam_users_source_or_destination",
+    "exclusion_window": "entire_training_interval",
+    "excluded_users_count": 1,
+    "excluded_users": [
+      "U2@DOM1"
+    ],
+    "training_total_events": 7,
+    "excluded_events": 2,
+    "eligible_events": 5,
+    "eligibility_percentage": 71.4286
+  }
+}

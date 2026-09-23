@@ -1,0 +1,147 @@
+{
+  "manifest_version": 1,
+  "task": "2.4 — Shared historical features",
+  "created_date": "2026-09-22",
+  "feature_policy_id": "lanl_historical_features_v1",
+  "feature_config_fingerprint": "e68cb98f1c927255889c30b3dff13e9bd6e91acf9ed4f07c368b777cb3f86b2a",
+  "feature_config_reference": "config/lanl_features.json",
+  "split_policy_fingerprint": "c5e3d5d89c0324b24ca79f391abfec197f47f89fd9ddb3f7652f4fe5a1284af9",
+  "split_manifest_reference": "data/manifests/lanl_splits_v1.json",
+  "source_dataset_reference": "data/processed/lanl_auth_days_01_30/authentication/events",
+  "pipeline_architecture": {
+    "workflow": "two_pass",
+    "pass_1": "Streaming raw causal feature extraction and training-only statistics accumulation (Chan parallel updates + candidate categories)",
+    "freeze": "Standardization parameters and vocabularies frozen to versioned JSON artifact",
+    "pass_2": "Frozen transformation of saved raw feature batches into model-ready Parquet tables"
+  },
+  "schemas": {
+    "raw_feature_fields": [
+      "timestamp", "source_user", "destination_user", "source_computer",
+      "destination_computer", "authentication_type", "logon_type",
+      "authentication_orientation", "authentication_result", "acting_user",
+      "exact_duplicate_ordinal", "source_line", "source_reference",
+      "prior_auth_count_1h", "prior_failure_count_1h", "seconds_since_previous_auth",
+      "has_user_history", "prior_unique_destinations_24h", "prior_user_destination_count_24h",
+      "is_new_user_destination", "is_new_host_connection", "history_complete_1h",
+      "history_complete_24h", "dataset_day"
+    ],
+    "transformed_feature_fields": [
+      "timestamp", "source_user", "destination_user", "source_computer",
+      "destination_computer", "authentication_type", "logon_type",
+      "authentication_orientation", "authentication_result", "acting_user",
+      "exact_duplicate_ordinal", "source_line", "source_reference",
+      "prior_auth_count_1h", "prior_failure_count_1h", "seconds_since_previous_auth",
+      "prior_unique_destinations_24h", "prior_user_destination_count_24h",
+      "history_complete_1h", "history_complete_24h", "dataset_day",
+      "log1p_prior_auth_count_1h_scaled", "log1p_prior_failure_count_1h_scaled",
+      "log1p_seconds_since_previous_auth_scaled", "log1p_prior_unique_destinations_24h_scaled",
+      "log1p_prior_user_destination_count_24h_scaled", "has_user_history",
+      "is_new_user_destination", "is_new_host_connection",
+      "auth_type_id", "logon_type_id", "auth_orientation_id", "auth_result_id"
+    ],
+    "model_inputs": {
+      "numeric": [
+        "log1p_prior_auth_count_1h_scaled",
+        "log1p_prior_failure_count_1h_scaled",
+        "log1p_seconds_since_previous_auth_scaled",
+        "log1p_prior_unique_destinations_24h_scaled",
+        "log1p_prior_user_destination_count_24h_scaled"
+      ],
+      "binary": [
+        "has_user_history",
+        "is_new_user_destination",
+        "is_new_host_connection"
+      ],
+      "categorical": [
+        "auth_type_id",
+        "logon_type_id",
+        "auth_orientation_id",
+        "auth_result_id"
+      ]
+    },
+    "metadata_and_eligibility_fields": [
+      "source_reference", "source_line", "timestamp", "dataset_day",
+      "acting_user", "source_user", "destination_user",
+      "source_computer", "destination_computer", "exact_duplicate_ordinal",
+      "authentication_type", "logon_type", "authentication_orientation", "authentication_result",
+      "prior_auth_count_1h", "prior_failure_count_1h", "seconds_since_previous_auth",
+      "prior_unique_destinations_24h", "prior_user_destination_count_24h",
+      "history_complete_1h", "history_complete_24h"
+    ]
+  },
+  "training_preprocessing_contract": {
+    "fitting_split": "train",
+    "fitting_timestamp_interval": "[1, 604801)",
+    "training_exclusion_policy": "train_redteam_users_source_or_destination",
+    "excluded_users": [
+      "U1723@DOM1",
+      "U6115@DOM1",
+      "U620@DOM1",
+      "U636@DOM1",
+      "U737@DOM1",
+      "U748@DOM1",
+      "U825@DOM1"
+    ],
+    "missing_gap_rule": "Null gaps for first-seen users excluded from fitting; assigned finite 0.0 placeholder post-scaling; distinguishable via has_user_history.",
+    "categorical_encoding": "0 = UNSEEN, 1 = MISSING, 2+ = sorted eligible training categories.",
+    "constant_feature_rule": "scale = 1.0 when std < 1e-12."
+  },
+  "tracked_sample": {
+    "path": "data/samples/lanl_features_sample",
+    "source": "data/samples/lanl_ingestion_sample/authentication/events",
+    "config_reference": "data/fixtures/fixture_features.json",
+    "splits_reference": "data/fixtures/fixture_splits.json",
+    "manifest_reference": "data/manifests/fixture_splits_v1.json",
+    "total_events": 7,
+    "raw_events": 7,
+    "transformed_events": 7,
+    "reconciled": true,
+    "excluded_fixture_user": "U2@DOM1",
+    "training_eligible_fitted": 5,
+    "training_excluded_skipped": 2,
+    "mode": "sample_fixture",
+    "is_production": false
+  },
+  "representative_performance_pilot": {
+    "path": "data/processed/lanl_features_pilot",
+    "source": "data/processed/lanl_auth_days_01_30/authentication/events",
+    "description": "Representative performance pilot spanning 15,800,000 real authentication events across the 24-hour window-expiry cycle (Day 1 into Day 2).",
+    "total_events_processed": 15800000,
+    "raw_events_written": 15800000,
+    "transformed_events_written": 15800000,
+    "reconciled": true,
+    "training_eligible_fitted_rows": 15796105,
+    "training_excluded_skipped_rows": 3895,
+    "distinct_users_tracked": 33601,
+    "distinct_computers_tracked": 10211,
+    "distinct_user_destinations_ever_seen": 213329,
+    "distinct_host_connections_ever_seen": 134752,
+    "timing": {
+      "pass1_seconds": 287.3,
+      "pass2_seconds": 166.13,
+      "total_wall_time_seconds": 453.43,
+      "pass1_throughput_events_per_sec": 54994.1,
+      "pass2_throughput_events_per_sec": 95108.2
+    },
+    "measured_memory_breakdown": {
+      "rolling_history_memory_mb": 319.33,
+      "rolling_24h_events_held": 15773726,
+      "rolling_1h_events_held": 610756,
+      "ever_seen_sets_memory_mb": 12.0,
+      "entity_tables_memory_mb": 2.365,
+      "total_internal_state_memory_mb": 333.695
+    }
+  },
+  "full_dataset_extrapolation": {
+    "total_authentication_events": 508854306,
+    "projected_pass1_hours": 2.57,
+    "projected_pass2_hours": 1.48,
+    "projected_total_runtime_hours": 4.05,
+    "projected_peak_rolling_history_mb": 350.0,
+    "projected_peak_ever_seen_mb": 60.0,
+    "projected_peak_internal_memory_mb": 450.0,
+    "projected_raw_parquet_gib": 15.2,
+    "projected_transformed_parquet_gib": 11.5,
+    "streaming_feasibility": "Fully verified. Memory is strictly bounded by the 24-hour sliding window with inactive user purging, and ever-seen 64-bit packed sets take under 60 MB for the full dataset."
+  }
+}

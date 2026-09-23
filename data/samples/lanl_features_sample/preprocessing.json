@@ -1,0 +1,112 @@
+{
+  "feature_version": "1.0.0",
+  "feature_name": "lanl_fixture_features_v1",
+  "feature_config_fingerprint": "f0b21ace8ea6f652d647b1c694f1b6cd254a51ee1d09fb1925a69f384c0009df",
+  "split_policy_fingerprint": "b30b9f9f61a8bfa93f17aed667aaebf3a576797bcfd4557a8d07aa903ce6fb54",
+  "mode": "pilot",
+  "is_production": false,
+  "is_frozen": true,
+  "missing_gap_placeholder": 0.0,
+  "fitting_row_counts": {
+    "total_scanned_rows": 7,
+    "training_scanned_rows": 7,
+    "training_eligible_fitted_rows": 5,
+    "training_excluded_skipped_rows": 2,
+    "validation_scanned_rows": 0,
+    "test_scanned_rows": 0
+  },
+  "numeric_stats": {
+    "prior_auth_count_1h": {
+      "count": 5,
+      "mean": 0.4969813299576001,
+      "std": 0.43194971397533305,
+      "scale": 0.43194971397533305,
+      "is_constant": false
+    },
+    "prior_failure_count_1h": {
+      "count": 5,
+      "mean": 0.0,
+      "std": 0.0,
+      "scale": 1.0,
+      "is_constant": true
+    },
+    "seconds_since_previous_auth": {
+      "count": 3,
+      "mean": 0.23104906018664845,
+      "std": 0.3267527144895157,
+      "scale": 0.3267527144895157,
+      "is_constant": false
+    },
+    "prior_unique_destinations_24h": {
+      "count": 5,
+      "mean": 0.4969813299576001,
+      "std": 0.43194971397533305,
+      "scale": 0.43194971397533305,
+      "is_constant": false
+    },
+    "prior_user_destination_count_24h": {
+      "count": 5,
+      "mean": 0.27725887222397816,
+      "std": 0.3395713818041331,
+      "scale": 0.3395713818041331,
+      "is_constant": false
+    }
+  },
+  "categorical_vocabularies": {
+    "authentication_type": {
+      "column_name": "authentication_type",
+      "unseen_token": "<UNSEEN>",
+      "unseen_id": 0,
+      "missing_token": "<MISSING>",
+      "missing_id": 1,
+      "training_distinct_categories": 2,
+      "category_to_id": {
+        "Kerberos": 2,
+        "Negotiate": 3
+      }
+    },
+    "logon_type": {
+      "column_name": "logon_type",
+      "unseen_token": "<UNSEEN>",
+      "unseen_id": 0,
+      "missing_token": "<MISSING>",
+      "missing_id": 1,
+      "training_distinct_categories": 3,
+      "category_to_id": {
+        "?": 2,
+        "Interactive": 3,
+        "RemoteInteractive": 4
+      }
+    },
+    "authentication_orientation": {
+      "column_name": "authentication_orientation",
+      "unseen_token": "<UNSEEN>",
+      "unseen_id": 0,
+      "missing_token": "<MISSING>",
+      "missing_id": 1,
+      "training_distinct_categories": 2,
+      "category_to_id": {
+        "LogOff": 2,
+        "LogOn": 3
+      }
+    },
+    "authentication_result": {
+      "column_name": "authentication_result",
+      "unseen_token": "<UNSEEN>",
+      "unseen_id": 0,
+      "missing_token": "<MISSING>",
+      "missing_id": 1,
+      "training_distinct_categories": 1,
+      "category_to_id": {
+        "Success": 2
+      }
+    }
+  },
+  "rules": {
+    "counts_transformation": "log1p(count) followed by standard scaling (x - mean) / scale",
+    "seconds_since_previous_auth_fitting": "nulls excluded from training statistics fitting",
+    "seconds_since_previous_auth_transform": "log1p(gap) standardized; missing gap assigned missing_gap_placeholder (0.0) post-scaling",
+    "categorical_encoding": "0 = UNSEEN, 1 = MISSING, 2+ = sorted training categories",
+    "constant_feature_handling": "scale = 1.0 when std < 1e-12"
+  }
+}

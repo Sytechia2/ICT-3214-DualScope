@@ -1,0 +1,52 @@
+{
+  "feature_version": "1.0.0",
+  "feature_name": "lanl_fixture_features_v1",
+  "dataset_start_timestamp": 1,
+  "lookback_1h_seconds": 3600,
+  "lookback_24h_seconds": 86400,
+  "missing_gap_placeholder": 0.0,
+  "unseen_category_token": "<UNSEEN>",
+  "unseen_category_id": 0,
+  "missing_category_token": "<MISSING>",
+  "missing_category_id": 1,
+  "model_inputs_numeric": [
+    "log1p_prior_auth_count_1h_scaled",
+    "log1p_prior_failure_count_1h_scaled",
+    "log1p_seconds_since_previous_auth_scaled",
+    "log1p_prior_unique_destinations_24h_scaled",
+    "log1p_prior_user_destination_count_24h_scaled"
+  ],
+  "model_inputs_binary": [
+    "has_user_history",
+    "is_new_user_destination",
+    "is_new_host_connection"
+  ],
+  "model_inputs_categorical": [
+    "auth_type_id",
+    "logon_type_id",
+    "auth_orientation_id",
+    "auth_result_id"
+  ],
+  "metadata_columns": [
+    "source_reference",
+    "source_line",
+    "timestamp",
+    "dataset_day",
+    "acting_user",
+    "source_user",
+    "destination_user",
+    "source_computer",
+    "destination_computer",
+    "authentication_type",
+    "logon_type",
+    "authentication_orientation",
+    "authentication_result",
+    "prior_auth_count_1h",
+    "prior_failure_count_1h",
+    "seconds_since_previous_auth",
+    "prior_unique_destinations_24h",
+    "prior_user_destination_count_24h",
+    "history_complete_1h",
+    "history_complete_24h"
+  ]
+}
