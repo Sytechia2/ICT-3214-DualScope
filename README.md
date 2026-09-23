@@ -11,7 +11,11 @@ This repository is being built from the shared workplans in:
 
 ## Current status
 
-Task 2.3 is complete. The chronological data split policy confirmed by Member 1 (and consumed by Member 4 for score fusion), training compromise exclusions, replay streaming engine, and evaluation unit definitions are established:
+Task 2.4 shared historical features are implemented. The streaming two-pass pipeline preserves `source_reference` in raw and transformed feature rows. A documented representative pilot processed and reconciled 15.8 million real authentication events; the full 30-day feature output is a separate run and has not been produced. See [the feature guide](docs/lanl_features.md) and [its manifest](data/manifests/lanl_features_v1.json).
+
+Task 2.5 evidence lookup and provenance helpers are implemented. `AuthenticationEvidenceLookup` resolves accepted `auth.txt:<source_line>` references to normalized events and their retained raw record; carrier helpers attach ordered references to sequence and graph evidence and support paging. The checked-in sample demonstrates end-to-end tracing, but it is synthetic sample data rather than a real detector incident. See [the evidence guide](docs/evidence_references.md).
+
+The chronological data split policy established for Task 2.3, including training compromise exclusions, replay boundaries and evaluation units, is:
 - **Training (Days 1–7, `[1, 604801)`)**: 113,699,496 events. Excludes seven red-team users (`32,659` events, 0.0287%) appearing in training compromise labels, leaving `113,666,837` eligible events (99.9713%) for normal model fitting, learned vocabularies, and scalers. Eligible training events are presumed normal background and are not guaranteed benign.
 - **Validation (Days 8–16, `[604801, 1382401)`)**: 164,299,768 events, 640 label rows / 614 unique labels (600 matched, 14 unmatched). Used for model tuning, threshold selection, and fusion calibration.
 - **Test (Days 17–30, `[1382401, 2592001)`)**: 230,855,042 events, 60 label rows / 52 unique labels. Evaluated strictly using frozen model checkpoints and calibration parameters.
