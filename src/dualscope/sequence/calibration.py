@@ -29,7 +29,7 @@ from typing import Any
 
 import numpy as np
 import pyarrow.dataset as ds
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import average_precision_score, roc_auc_score
 
 from dualscope.splits import SplitConfig, aggregate_labels_to_user_hours, deduplicate_labels
 
@@ -225,13 +225,18 @@ def evaluation_summary(
     labels = np.asarray(labels, dtype=bool)
     scores = np.asarray(scores, dtype=np.float64)
     covered = int(labels.sum())
+    prevalence = covered / len(scores) if len(scores) else None
+    ap = average_precision(labels, scores)
     summary: dict[str, Any] = {
         "units_scored": int(len(scores)),
         "positive_units_total": int(positive_units_total),
         "positive_units_scored": covered,
         "positive_coverage": covered / positive_units_total if positive_units_total else None,
-        "prevalence": covered / len(scores) if len(scores) else None,
-        "average_precision": average_precision(labels, scores),
+        "prevalence": prevalence,
+        "average_precision": ap,
+        # Descriptive only; model selection uses average_precision.
+        "average_precision_lift_over_random": ap / prevalence if ap is not None and prevalence else None,
+        "roc_auc": float(roc_auc_score(labels, scores)) if 0 < covered < len(scores) else None,
     }
     chosen = best_f1_threshold(labels, scores) if threshold is None else detection_metrics(labels, scores, threshold)
     summary["at_threshold"] = chosen

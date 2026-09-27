@@ -68,6 +68,8 @@ def test_evaluation_summary_reports_coverage_of_unscored_positives() -> None:
     assert summary["positive_units_scored"] == 1
     assert summary["positive_coverage"] == 0.5
     assert summary["average_precision"] == pytest.approx(1.0)
+    assert summary["roc_auc"] == pytest.approx(1.0)
+    assert summary["average_precision_lift_over_random"] == pytest.approx(4.0)
     assert summary["at_threshold"]["recall_including_unscored_positives"] == 0.5
 
 

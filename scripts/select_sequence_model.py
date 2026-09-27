@@ -61,9 +61,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-sequences", type=int, default=None, help="Override (development only).")
     parser.add_argument("--max-epochs", type=int, default=None, help="Override (development only).")
     parser.add_argument("--torch-threads", type=int, default=None)
-    parser.add_argument("--no-reuse", action="store_true", help="Retrain even when a matching run exists.")
+    parser.add_argument("--no-reuse", action="store_true", help="Retrain and rescore even when matching results exist.")
+    parser.add_argument("--lengths", type=int, nargs="*", default=None, help="Only process these maximum lengths.")
+    parser.add_argument(
+        "--score-only", action="store_true",
+        help="Train/score the requested trials and record them, without selecting or freezing.",
+    )
     parser.add_argument("--allow-pilot-features", action="store_true")
     return parser.parse_args()
+
+
+def _cached_validation_scores(selection_dir: Path, run_id: str, expected: dict) -> pa.Table | None:
+    """Validation raw scores saved for exactly this checkpoint and input version, if present."""
+    table_path = selection_dir / f"{run_id}_validation_raw.parquet"
+    meta_path = selection_dir / f"{run_id}_validation_raw.json"
+    if not (table_path.is_file() and meta_path.is_file()):
+        return None
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    if any(meta.get(key) != value for key, value in expected.items()):
+        return None
+    return pq.read_table(table_path)
 
 
 def _jsonable(value):
@@ -90,6 +107,10 @@ def main() -> int:
     }
     if overrides:
         base = replace(base, training=replace(base.training, **overrides))
+    if args.torch_threads:
+        import torch
+
+        torch.set_num_threads(args.torch_threads)  # also bounds validation scoring
     inputs = load_inputs(
         args.features_root, args.splits_config, args.splits_manifest, args.feature_config,
         labels_dir=args.labels_dir, allow_pilot_features=args.allow_pilot_features,
@@ -97,17 +118,22 @@ def main() -> int:
     positives = load_positive_user_hours(args.labels_dir, inputs.split_cfg, "validation", base.policy.hour_seconds)
     print(f"Validation positive user-hours: {len(positives)}")
     args.selection_dir.mkdir(parents=True, exist_ok=True)
-    trials_path = args.selection_dir / "trials.jsonl"
+    trials_path = args.selection_dir / ("trials_partial.jsonl" if args.score_only else "trials.jsonl")
     trials_path.write_text("", encoding="utf-8")
 
     trials: list[dict] = []
     validation_scores: dict[str, dict] = {}
     started_all = time.time()
     size_names = list(base.search.model_sizes)
-    for length in base.search.max_sequence_lengths:
+    lengths = args.lengths or base.search.max_sequence_lengths
+    if set(lengths) - set(base.search.max_sequence_lengths):
+        raise SystemExit(f"--lengths must be within the search space {base.search.max_sequence_lengths}")
+    if args.lengths and not args.score_only and set(lengths) != set(base.search.max_sequence_lengths):
+        raise SystemExit("selection must cover the whole search space; use --score-only for a subset")
+    for length in lengths:
         length_cfg = base.with_trial(length, size_names[0])
-        train, monitor, stats = prepare_samples(inputs, length_cfg, args.cache_dir)
-        models, run_ids, manifests = {}, {}, {}
+        samples = None
+        to_score, run_ids, manifests, cached = {}, {}, {}, {}
         for size in size_names:
             config = base.with_trial(length, size)
             run_id = f"seq-L{length}-{size}"
@@ -126,7 +152,9 @@ def main() -> int:
             else:
                 print(f"Training {run_id}")
                 try:
-                    manifest = train_trial(inputs, config, train, monitor, stats, run_dir, run_id)
+                    if samples is None:
+                        samples = prepare_samples(inputs, length_cfg, args.cache_dir)
+                    manifest = train_trial(inputs, config, *samples, run_dir, run_id)
                 except Exception as exc:  # record unsuccessful runs instead of hiding them
                     failure = {"run_id": run_id, "max_sequence_length": length, "model_size": size, "status": "failed", "error": repr(exc)}
                     trials.append(failure)
@@ -134,25 +162,45 @@ def main() -> int:
                         handle.write(json.dumps(failure) + "\n")
                     print(f"  FAILED: {exc!r}")
                     continue
-            model, _ = load_checkpoint(run_dir / "checkpoint.pt", manifest["checkpoint"]["sha256"])
-            models[size], run_ids[size], manifests[size] = model, run_id, manifest
-        if not models:
+            run_ids[size], manifests[size] = run_id, manifest
+            expected = {
+                "run_id": run_id,
+                "checkpoint_sha256": manifest["checkpoint"]["sha256"],
+                "preprocessing_sha256": inputs.feature_info()["preprocessing_sha256"],
+                "split_policy_fingerprint": inputs.split_cfg.fingerprint(),
+            }
+            table = None if args.no_reuse else _cached_validation_scores(args.selection_dir, run_id, expected)
+            if table is not None:
+                print(f"Reusing validation scores of {run_id}")
+                cached[size] = table
+            else:
+                model, _ = load_checkpoint(run_dir / "checkpoint.pt", manifest["checkpoint"]["sha256"])
+                to_score[size] = (model, expected)
+        if not manifests:
             continue
 
-        print(f"Scoring validation split with L={length}: {sorted(models)}")
-        scored = score_split(inputs, length_cfg.policy, models, "validation")
-        labels = unit_labels(scored["users"], scored["hours"], positives)
-        for size, model in models.items():
+        if to_score:
+            print(f"Scoring validation split with L={length}: {sorted(to_score)}")
+            scored = score_split(inputs, length_cfg.policy, {s: m for s, (m, _) in to_score.items()}, "validation")
+            for size, (_, expected) in to_score.items():
+                columns = {
+                    "user_id": pa.array(scored["users"], pa.string()),
+                    "window_start": pa.array(scored["hours"], pa.int64()),
+                    "dataset_day": pa.array(scored["days"], pa.int32()),
+                    "n_events": pa.array(scored["n_events"], pa.int32()),
+                }
+                columns.update({f"raw_{agg}": pa.array(v, pa.float64()) for agg, v in scored["raw"][size].items()})
+                cached[size] = pa.table(columns)
+                pq.write_table(cached[size], args.selection_dir / f"{run_ids[size]}_validation_raw.parquet", compression="zstd")
+                meta = {**expected, "units": cached[size].num_rows, "days": inputs.days_in("validation")}
+                (args.selection_dir / f"{run_ids[size]}_validation_raw.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+        for size, table in cached.items():
             run_id = run_ids[size]
-            raw_by_agg = scored["raw"][size]
-            table = {
-                "user_id": pa.array(scored["users"], pa.string()),
-                "window_start": pa.array(scored["hours"], pa.int64()),
-                "dataset_day": pa.array(scored["days"], pa.int32()),
-                "n_events": pa.array(scored["n_events"], pa.int32()),
-            }
-            table.update({f"raw_{agg}": pa.array(values, pa.float64()) for agg, values in raw_by_agg.items()})
-            pq.write_table(pa.table(table), args.selection_dir / f"{run_id}_validation_raw.parquet", compression="zstd")
+            labels = unit_labels(
+                table["user_id"].to_numpy(zero_copy_only=False), table["window_start"].to_numpy(), positives
+            )
+            raw_by_agg = {agg: table[f"raw_{agg}"].to_numpy() for agg in base.search.aggregations}
             validation_scores[run_id] = raw_by_agg
             for aggregation in base.search.aggregations:
                 summary = evaluation_summary(labels, raw_by_agg[aggregation], len(positives))
@@ -177,6 +225,10 @@ def main() -> int:
                     f"  {run_id} {aggregation}: AP={summary['average_precision']:.5f} "
                     f"bestF1={summary['at_threshold']['f1']:.4f} coverage={summary['positive_coverage']:.3f}"
                 )
+
+    if args.score_only:
+        print(f"Scored {len(trials)} trial(s) for L={lengths}; no selection made (--score-only)")
+        return 0
 
     completed = [t for t in trials if t["status"] == "completed" and t["validation"]["average_precision"] is not None]
     if not completed:

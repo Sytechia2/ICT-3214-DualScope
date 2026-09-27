@@ -54,9 +54,14 @@ def _percentiles(values: np.ndarray) -> dict[str, float]:
 def write_tensor_sample(day, lengths: int, count: int, output: Path) -> dict:
     """Save padded tensors, masks and evidence references for a few sequences."""
     available = np.flatnonzero(day.scorable_mask())
-    # Include multi-chunk hours so truncation-free splitting is visible.
-    multi = available[day.counts[available] > lengths][: max(1, count // 3)]
-    single = available[day.counts[available] <= lengths][: count - len(multi)]
+    rng = np.random.default_rng(0)
+    # Seeded random hours, including a few that split into 2-3 chunks so
+    # truncation-free splitting is visible without one busy account dominating.
+    counts = day.counts[available]
+    multi_pool = available[(counts > lengths) & (counts <= 3 * lengths)]
+    single_pool = available[counts <= lengths]
+    multi = rng.choice(multi_pool, size=min(len(multi_pool), max(1, count // 4)), replace=False)
+    single = rng.choice(single_pool, size=min(len(single_pool), count - len(multi)), replace=False)
     chosen = np.sort(np.r_[single, multi])
     chunks = build_chunks(day.offsets, day.counts, lengths, chosen)
     dense, categorical, mask = gather_padded(day.numeric, day.categorical, chunks.start, chunks.length, pad_to=lengths)
