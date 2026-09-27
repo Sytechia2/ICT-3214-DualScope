@@ -1,0 +1,44 @@
+{
+  "description": "Short-term sequence detector (Tasks 3.1-3.4). Policy/model/training values are defaults; the search block is the bounded validation grid for Task 3.3.",
+  "policy": {
+    "hour_seconds": 3600,
+    "max_sequence_length": 64,
+    "min_events": 1,
+    "require_complete_24h_history": true
+  },
+  "model": {
+    "hidden_size": 64,
+    "latent_size": 32,
+    "num_layers": 1,
+    "embedding_dim": 8,
+    "dropout": 0.0,
+    "numeric_weight": 1.0,
+    "binary_weight": 1.0,
+    "categorical_weight": 1.0
+  },
+  "training": {
+    "seed": 42,
+    "train_sequences": 300000,
+    "max_chunks_per_user_hour": 2,
+    "monitor_sequences": 30000,
+    "batch_size": 512,
+    "learning_rate": 0.001,
+    "max_epochs": 8,
+    "early_stopping_patience": 2,
+    "gradient_clip_norm": 1.0,
+    "torch_threads": 0
+  },
+  "search": {
+    "max_sequence_lengths": [32, 64, 128],
+    "model_sizes": {
+      "small": {"hidden_size": 32, "latent_size": 16, "embedding_dim": 4},
+      "medium": {"hidden_size": 64, "latent_size": 32, "embedding_dim": 8}
+    },
+    "aggregations": ["max_chunk_mean", "max_event", "hour_mean"],
+    "selection_metric": "average_precision",
+    "threshold_objective": "max_f1"
+  },
+  "aggregation": "max_chunk_mean",
+  "top_events": 5,
+  "top_features": 3
+}
