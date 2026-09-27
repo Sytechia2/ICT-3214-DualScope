@@ -40,7 +40,17 @@ python scripts/build_sequences.py `
   --sample-output outputs/sequence/tensor_sample/sequence_tensors
 ```
 
-It writes [`data/manifests/lanl_sequences_v1.json`](../data/manifests/lanl_sequences_v1.json) with per-split status counts, fitting-eligible counts, events-per-hour percentiles, chunk counts per candidate `L` and the tracker summary. `--sample-output` saves padded tensors, masks and their ordered evidence references for inspection (a tracked copy is in `data/samples/sequence_tensors_sample/`).
+It writes [`data/manifests/lanl_sequences_v1.json`](../data/manifests/lanl_sequences_v1.json) with per-split status counts, fitting-eligible counts, events-per-hour percentiles, chunk counts per candidate `L` and the tracker summary.
+
+**Result on Days 1–30** (production Task 2.4 features, 508,854,306 events, 348 s):
+
+| Split | User-hours | Available | `insufficient_history` | Fitting-eligible | Hours with ≤ 64 events | Chunks at L = 32 / 64 / 128 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Train (days 1–7) | 2,564,057 | 2,239,268 | 324,789 (day 1) | 2,238,183 (97.9M events) | 91.3% | 4.36M / 2.93M / 2.51M |
+| Validation (days 8–16) | 3,745,355 | 3,745,355 | 0 | — | 90.5% | 7.31M / 4.92M / 4.19M |
+| Test (days 17–30) | 5,537,311 | 5,537,311 | 0 | — | 92.2% | 10.42M / 7.13M / 6.17M |
+
+All 11,846,723 candidates were recorded by the tracker, with 0 split-boundary, 0 hour-boundary and 0 out-of-bounds rejections. 1,085 available training hours (1,237 in total including warm-up hours) touched a training-excluded user and were withheld from fitting. The median hour has 24 events; the 99th percentile is 360 and the largest is 27,381, so long hours are chunked rather than truncated. `--sample-output` saves padded tensors, masks and their ordered evidence references for inspection (a tracked copy is in `data/samples/sequence_tensors_sample/`).
 
 ## Task 3.2 — GRU autoencoder
 
@@ -55,6 +65,26 @@ It writes [`data/manifests/lanl_sequences_v1.json`](../data/manifests/lanl_seque
 ```powershell
 python scripts/train_sequence_model.py --max-sequence-length 64 --model-size medium
 ```
+
+**Result:** all six search-space models trained on the production features. Each was an 8-epoch run with `torch_threads = 5`, and three trained in parallel on an Intel Core Ultra 7 155H CPU (no GPU).
+
+- A pilot pass on 20,000 Day 2 chunks measured epoch time before the full runs (about 8 s per 20,000 sequences at 16 threads).
+- The training sample holds 300,000 chunks drawn from 2,238,183 eligible training user-hours. The monitor sample holds 30,000 validation chunks.
+- Every run reloaded its checkpoint from disk and produced finite held-out scores.
+- Monitor loss was still falling slowly at epoch 8, so every run kept its last epoch. The epoch budget, not convergence, bounded training.
+
+| Run | Parameters | Train / monitor loss at selected epoch | Training time |
+| --- | ---: | --- | ---: |
+| `seq-L32-small` | 13,443 | 0.2243 / 0.2251 | 6.4 min |
+| `seq-L32-medium` | 47,311 | 0.1877 / 0.1865 | 12.7 min |
+| `seq-L64-small` | 13,443 | 0.2354 / 0.2369 | 10.2 min |
+| `seq-L64-medium` | 47,311 | 0.2129 / 0.2139 | 23.3 min |
+| `seq-L128-small` | 13,443 | 0.2403 / 0.2430 | 18.4 min |
+| `seq-L128-medium` | 47,311 | 0.2164 / 0.2201 | 22.2 min |
+
+The training samples contain 5.8M (L = 32), 8.3M (L = 64) and 9.5M (L = 128) events.
+
+Per-epoch losses are in each run's `training_log.jsonl` and `run_manifest.json`.
 
 ## Task 3.3 — Selection and calibration
 
@@ -94,7 +124,41 @@ python scripts/select_sequence_model.py `
   --labels-dir <lanl_auth_days_01_30>/redteam_labels/labels
 ```
 
-Completed runs with the same configuration fingerprint and preprocessing hash are reused, so selection can resume after an interruption.
+Completed runs with the same configuration fingerprint and preprocessing hash are reused. Validation scores are cached per checkpoint hash, so trials can be scored as they finish (`--score-only --lengths 32`) and selection can resume after an interruption. A final selection must cover the whole search space.
+
+**Result** (validation days 8–16: 3,745,355 scorable user-hours, 220 positive user-hours, all 220 scored; prevalence 5.87 × 10⁻⁵):
+
+| Rank | Run | Aggregation | Average precision | Lift over random | ROC-AUC | Best F1 |
+| ---: | --- | --- | ---: | ---: | ---: | ---: |
+| **1** | **`seq-L32-small`** | **`max_event`** | **0.00598** | **102×** | **0.880** | **0.039** |
+| 2 | `seq-L128-small` | `max_event` | 0.00571 | 97× | 0.867 | 0.055 |
+| 3 | `seq-L32-medium` | `max_event` | 0.00533 | 91× | 0.872 | 0.051 |
+| 4 | `seq-L128-medium` | `max_event` | 0.00483 | 82× | 0.859 | 0.040 |
+| 5 | `seq-L64-medium` | `max_event` | 0.00456 | 78× | 0.861 | 0.036 |
+| 6 | `seq-L64-small` | `max_event` | 0.00369 | 63× | 0.874 | 0.029 |
+| 7–18 | all models | `max_chunk_mean` / `hour_mean` | 0.00066–0.00212 | 11–36× | 0.845–0.890 | ≤ 0.012 |
+
+All 18 trials are in `data/manifests/sequence_detector_v1.json`, and none failed.
+
+`max_event` clearly beats averaging aggregations for every model. Labelled red-team authentications are a few events inside otherwise ordinary hours, so averaging dilutes them. Sequence length and model size matter much less than aggregation, and the larger models did not help.
+
+**Frozen detector:**
+- Model: `seq-gru-ae-v1-L32-h32-91e4b11d34`, trained as `seq-L32-small` (L = 32; hidden 32, latent 16, embedding 4) and scored with `max_event`.
+- Calibration: fitted on all 3,745,355 validation user-hours; tail scale 0.126 log-units above the 99.9th percentile.
+- Alert threshold: `score ≥ 0.999633`.
+- Validation at that threshold:
+
+| Measure | Value |
+| --- | --- |
+| Alerts | 340 (37.8 per day) |
+| True / false positives | 11 / 329 |
+| False negatives | 209 |
+| True negatives | 3,744,806 |
+| Precision | 3.2% |
+| Recall | 5.0% |
+| False-positive rate | 8.8 × 10⁻⁵ |
+
+These are weak standalone detection results at the user-hour level. Ranking is well above chance (ROC-AUC 0.88), but most labelled user-hours are not in the top alert band. The result is reported as found. Whether it adds value alongside the graph detector is the fusion question in Task 9.3. Test labels were not read, and no test metric was computed.
 
 ## Task 3.4 — Output schema and evidence
 
@@ -136,6 +200,21 @@ record = store.get("U123@DOM1", 777601)       # adds source_references, evidence
 events = AuthenticationEvidenceLookup("<lanl_auth_days_01_30>/authentication").lookup_many(record["source_references"])
 alerts = store.alerts(columns=["user_id", "window_start", "score"])
 ```
+
+**Result:** the frozen detector exported all 30 days to `outputs/sequence_scores/seq-gru-ae-v1-L32-h32-91e4b11d34/` (2.0 GB, 17.8 min, about 33 s per day).
+
+| Split | Rows | `available` | `insufficient_history` | Alerts |
+| --- | ---: | ---: | ---: | ---: |
+| Train | 2,564,057 | 2,239,268 | 324,789 | 211 |
+| Validation | 3,745,355 | 3,745,355 | 0 | 340 |
+| Test | 5,537,311 | 5,537,311 | 0 | 233 |
+
+Checks on the export:
+- Adding the example `--requested-units` file created exactly 1 `no_activity` row.
+- Re-scoring all 450,712 user-hours of day 9 gave a maximum raw difference of 0.0 and identical alerts.
+- The top day-9 alert (`C5857$@DOM1`, 223 events in 7 chunks) resolved all 223 references through `AuthenticationEvidenceLookup` to raw `auth.txt` records of that user inside the window.
+
+Test alert counts are volumes only; no labels were read.
 
 **Consistency:** the export re-scores one validation day and fails unless raw scores match within `1e-6` and alert decisions are identical (recorded in `summary.json`). `--sample-output` writes a small handoff sample (Parquet + JSONL) covering ordinary, high-error, alerting, multi-chunk, warm-up and `no_activity` rows; a tracked copy is in `data/samples/sequence_scores_sample/`.
 
@@ -186,4 +265,6 @@ The tests run synthetic events through the real Task 2.4 feature engine (`tests/
 - Validation labels are concentrated in two campaign days, so the selected settings and threshold are fitted to those campaigns. The calibration reference also includes validation attack hours (a negligible fraction).
 - Features count authentication records (including LogOff, TGS, AuthMap), not interactive sessions. Heavy service accounts produce many chunks per hour, and `max_chunk_mean` and `max_event` give such hours more chances of a high score.
 - An hour with one event is scored with little sequence context.
+- Training stopped at the 8-epoch budget while monitor loss was still falling slightly. Longer training and larger training samples were outside the bounded search and were not tried.
+- The max-F1 threshold is chosen on only 220 positive user-hours, most of them from two campaign days, so validation precision and recall at that threshold are noisy estimates.
 - A score becomes available only when its hour closes, so the sequence detector gives no intra-hour early warning.

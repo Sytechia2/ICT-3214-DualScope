@@ -1,0 +1,429 @@
+{
+  "manifest_version": 1,
+  "task": "3.1 \u2014 Construct user-hour sequences",
+  "created_utc": "2026-09-27T18:52:55Z",
+  "source_revision": "7f3095de4165f03d0e9b7d2099d43fba3a49c37f",
+  "sequence_policy_version": "1.0.0",
+  "sequence_policy": {
+    "hour_seconds": 3600,
+    "max_sequence_length": 64,
+    "min_events": 1,
+    "require_complete_24h_history": true,
+    "acting_user": "acting_user (= source_user, Task 2.2)",
+    "unit": "(acting_user, hour_start) with hour_start = 1 + floor((timestamp - 1) / 3600) * 3600",
+    "event_order": "timestamp, then source_line (both ascending)",
+    "long_hours": "split into ceil(n / L) balanced consecutive chunks (lengths differ by at most one); no event is dropped",
+    "padding": "right padding with a boolean mask; padded steps carry zero inputs and zero loss",
+    "warm_up": "user-hours whose events lack a complete 24h feature history (dataset day 1) are insufficient_history",
+    "fitting_eligibility": "train split, available, and no event whose source or destination user is a training-excluded user",
+    "candidate_max_lengths": [
+      32,
+      64,
+      128
+    ],
+    "model_inputs": [
+      "log1p_prior_auth_count_1h_scaled",
+      "log1p_prior_failure_count_1h_scaled",
+      "log1p_seconds_since_previous_auth_scaled",
+      "log1p_prior_unique_destinations_24h_scaled",
+      "log1p_prior_user_destination_count_24h_scaled",
+      "has_user_history",
+      "is_new_user_destination",
+      "is_new_host_connection",
+      "auth_type_id",
+      "logon_type_id",
+      "auth_orientation_id",
+      "auth_result_id"
+    ]
+  },
+  "inputs": {
+    "feature": {
+      "feature_version": "1.0.0",
+      "feature_name": "lanl_historical_features_v1",
+      "feature_config_fingerprint": "e68cb98f1c927255889c30b3dff13e9bd6e91acf9ed4f07c368b777cb3f86b2a",
+      "preprocessing_sha256": "a05c68becf449e0e1da40c715f6141c232c96c2b4bc7e8a88db0e90bf35f2908",
+      "preprocessing_mode": "production",
+      "features_dir": "data/processed/lanl_features_days_01_30/transformed/events"
+    },
+    "split_policy_fingerprint": "c5e3d5d89c0324b24ca79f391abfec197f47f89fd9ddb3f7652f4fe5a1284af9",
+    "excluded_training_users": [
+      "U1723@DOM1",
+      "U6115@DOM1",
+      "U620@DOM1",
+      "U636@DOM1",
+      "U737@DOM1",
+      "U748@DOM1",
+      "U825@DOM1"
+    ],
+    "sequence_config_fingerprint": "ddee0b7367840b6fd9dad311d40352876104cf472ba94470a66b8a304bee335d"
+  },
+  "boundary_checks": {
+    "every_event_inside_its_split": true,
+    "every_event_inside_its_hour": true,
+    "tracker": {
+      "total_candidates": 11846723,
+      "scorable_candidates": 11521934,
+      "rejected_candidates": 324789,
+      "status_counts": {
+        "available": 11521934,
+        "insufficient_history": 324789,
+        "split_boundary_violation": 0,
+        "hour_boundary_violation": 0,
+        "out_of_bounds": 0
+      }
+    }
+  },
+  "splits": {
+    "train": {
+      "days": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "events": 113699496,
+      "user_hours": 2564057,
+      "status_counts": {
+        "insufficient_history": 324789,
+        "available": 2239268
+      },
+      "status_detail_counts": {
+        "warmup_incomplete_24h_history": 324789
+      },
+      "fitting_eligible_user_hours": 2238183,
+      "fitting_eligible_events": 97883748,
+      "user_hours_touching_excluded_users": 1237,
+      "chunks_by_max_length": {
+        "32": 4358436,
+        "64": 2932735,
+        "128": 2509331
+      },
+      "available_events_per_user_hour": {
+        "p50": 24.0,
+        "p75": 43.0,
+        "p90": 61.0,
+        "p95": 83.0,
+        "p99": 360.0,
+        "p99.9": 2790.733000000473,
+        "p100": 27381.0
+      },
+      "available_user_hours_within_length": {
+        "32": 0.6100712375651329,
+        "64": 0.9128362482739896,
+        "128": 0.9694931557991272
+      }
+    },
+    "validation": {
+      "days": [
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "events": 164299768,
+      "user_hours": 3745355,
+      "status_counts": {
+        "available": 3745355
+      },
+      "status_detail_counts": {},
+      "fitting_eligible_user_hours": 0,
+      "fitting_eligible_events": 0,
+      "user_hours_touching_excluded_users": 0,
+      "chunks_by_max_length": {
+        "32": 7311025,
+        "64": 4918454,
+        "128": 4194405
+      },
+      "available_events_per_user_hour": {
+        "p50": 25.0,
+        "p75": 43.0,
+        "p90": 63.0,
+        "p95": 92.0,
+        "p99": 363.0,
+        "p99.9": 2402.0,
+        "p100": 27044.0
+      },
+      "available_user_hours_within_length": {
+        "32": 0.6070546049706904,
+        "64": 0.9052816088194577,
+        "128": 0.9657880227641973
+      }
+    },
+    "test": {
+      "days": [
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30
+      ],
+      "events": 230855042,
+      "user_hours": 5537311,
+      "status_counts": {
+        "available": 5537311
+      },
+      "status_detail_counts": {},
+      "fitting_eligible_user_hours": 0,
+      "fitting_eligible_events": 0,
+      "user_hours_touching_excluded_users": 0,
+      "chunks_by_max_length": {
+        "32": 10422756,
+        "64": 7127828,
+        "128": 6169425
+      },
+      "available_events_per_user_hour": {
+        "p50": 23.0,
+        "p75": 41.0,
+        "p90": 59.0,
+        "p95": 83.0,
+        "p99": 360.0,
+        "p99.9": 2272.69000000041,
+        "p100": 23303.0
+      },
+      "available_user_hours_within_length": {
+        "32": 0.6380750512297395,
+        "64": 0.9215599412783569,
+        "128": 0.9680415277379218
+      }
+    }
+  },
+  "days": [
+    {
+      "dataset_day": 1,
+      "split": "train",
+      "events": 15740952,
+      "user_hours": 324789,
+      "available_user_hours": 0
+    },
+    {
+      "dataset_day": 2,
+      "split": "train",
+      "events": 17562370,
+      "user_hours": 383844,
+      "available_user_hours": 383844
+    },
+    {
+      "dataset_day": 3,
+      "split": "train",
+      "events": 15585920,
+      "user_hours": 357790,
+      "available_user_hours": 357790
+    },
+    {
+      "dataset_day": 4,
+      "split": "train",
+      "events": 13473144,
+      "user_hours": 311609,
+      "available_user_hours": 311609
+    },
+    {
+      "dataset_day": 5,
+      "split": "train",
+      "events": 13398091,
+      "user_hours": 310062,
+      "available_user_hours": 310062
+    },
+    {
+      "dataset_day": 6,
+      "split": "train",
+      "events": 18557390,
+      "user_hours": 423620,
+      "available_user_hours": 423620
+    },
+    {
+      "dataset_day": 7,
+      "split": "train",
+      "events": 19381629,
+      "user_hours": 452343,
+      "available_user_hours": 452343
+    },
+    {
+      "dataset_day": 8,
+      "split": "validation",
+      "events": 19394277,
+      "user_hours": 456882,
+      "available_user_hours": 456882
+    },
+    {
+      "dataset_day": 9,
+      "split": "validation",
+      "events": 19374681,
+      "user_hours": 450712,
+      "available_user_hours": 450712
+    },
+    {
+      "dataset_day": 10,
+      "split": "validation",
+      "events": 18141675,
+      "user_hours": 398644,
+      "available_user_hours": 398644
+    },
+    {
+      "dataset_day": 11,
+      "split": "validation",
+      "events": 14170706,
+      "user_hours": 333297,
+      "available_user_hours": 333297
+    },
+    {
+      "dataset_day": 12,
+      "split": "validation",
+      "events": 14012614,
+      "user_hours": 329746,
+      "available_user_hours": 329746
+    },
+    {
+      "dataset_day": 13,
+      "split": "validation",
+      "events": 19870851,
+      "user_hours": 433399,
+      "available_user_hours": 433399
+    },
+    {
+      "dataset_day": 14,
+      "split": "validation",
+      "events": 20807328,
+      "user_hours": 454365,
+      "available_user_hours": 454365
+    },
+    {
+      "dataset_day": 15,
+      "split": "validation",
+      "events": 20105310,
+      "user_hours": 457110,
+      "available_user_hours": 457110
+    },
+    {
+      "dataset_day": 16,
+      "split": "validation",
+      "events": 18422326,
+      "user_hours": 431200,
+      "available_user_hours": 431200
+    },
+    {
+      "dataset_day": 17,
+      "split": "test",
+      "events": 15886632,
+      "user_hours": 381410,
+      "available_user_hours": 381410
+    },
+    {
+      "dataset_day": 18,
+      "split": "test",
+      "events": 13422624,
+      "user_hours": 328802,
+      "available_user_hours": 328802
+    },
+    {
+      "dataset_day": 19,
+      "split": "test",
+      "events": 13208802,
+      "user_hours": 325597,
+      "available_user_hours": 325597
+    },
+    {
+      "dataset_day": 20,
+      "split": "test",
+      "events": 13138834,
+      "user_hours": 326398,
+      "available_user_hours": 326398
+    },
+    {
+      "dataset_day": 21,
+      "split": "test",
+      "events": 18258787,
+      "user_hours": 429278,
+      "available_user_hours": 429278
+    },
+    {
+      "dataset_day": 22,
+      "split": "test",
+      "events": 18960857,
+      "user_hours": 452143,
+      "available_user_hours": 452143
+    },
+    {
+      "dataset_day": 23,
+      "split": "test",
+      "events": 17984194,
+      "user_hours": 453236,
+      "available_user_hours": 453236
+    },
+    {
+      "dataset_day": 24,
+      "split": "test",
+      "events": 16506762,
+      "user_hours": 395882,
+      "available_user_hours": 395882
+    },
+    {
+      "dataset_day": 25,
+      "split": "test",
+      "events": 13828869,
+      "user_hours": 335575,
+      "available_user_hours": 335575
+    },
+    {
+      "dataset_day": 26,
+      "split": "test",
+      "events": 13568099,
+      "user_hours": 331402,
+      "available_user_hours": 331402
+    },
+    {
+      "dataset_day": 27,
+      "split": "test",
+      "events": 18557564,
+      "user_hours": 431728,
+      "available_user_hours": 431728
+    },
+    {
+      "dataset_day": 28,
+      "split": "test",
+      "events": 19484717,
+      "user_hours": 452417,
+      "available_user_hours": 452417
+    },
+    {
+      "dataset_day": 29,
+      "split": "test",
+      "events": 19065609,
+      "user_hours": 446892,
+      "available_user_hours": 446892
+    },
+    {
+      "dataset_day": 30,
+      "split": "test",
+      "events": 18982692,
+      "user_hours": 446551,
+      "available_user_hours": 446551
+    }
+  ],
+  "tensor_sample": {
+    "npz": "data/samples/sequence_tensors_sample/sequence_tensors.npz",
+    "json": "data/samples/sequence_tensors_sample/sequence_tensors.json",
+    "sequences": 15,
+    "dataset_day": 9,
+    "command": "python scripts/build_sequences.py --days 9 --sample-day 9 --sample-sequences 12 --sample-output data/samples/sequence_tensors_sample/sequence_tensors --output <scratch manifest>",
+    "note": "Regenerated with the seeded sampler (commit fcea5ee) after the full manifest run; the counts in this manifest are unaffected."
+  },
+  "labels_used": false,
+  "runtime_seconds": 348.1
+}

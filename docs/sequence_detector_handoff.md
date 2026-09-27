@@ -2,6 +2,23 @@
 
 This note lists what the short-term sequence detector (Tasks 3.1–3.4) gives downstream components, and the rules for using it correctly. Method details are in [sequence_detector.md](sequence_detector.md). Frozen settings and validation results are in [`data/manifests/sequence_detector_v1.json`](../data/manifests/sequence_detector_v1.json).
 
+## At a glance
+
+| Item | Value |
+| --- | --- |
+| `model_version` | `seq-gru-ae-v1-L32-h32-91e4b11d34` |
+| Selected run | `seq-L32-small`: L = 32, hidden 32, latent 16, embedding 4, `max_event` aggregation |
+| Frozen record hash | `content_sha256` in `frozen_detector.json`, also in the manifest |
+| Alert threshold | `score ≥ 0.999633` (validation max-F1) |
+| Validation (days 8–16) | AP 0.00598 (102× random), ROC-AUC 0.880; at threshold: 340 alerts (37.8/day), precision 3.2%, recall 5.0%, FPR 8.8 × 10⁻⁵ |
+| Rows exported | 11,846,723 user-hours (2,564,057 train / 3,745,355 validation / 5,537,311 test) + 1 example `no_activity` row |
+| Alert volume | train 211, validation 340, test 233 (volumes only; no test labels were read) |
+| Test labels used | none |
+| Frozen record / checkpoint SHA-256 | `7f788ee6…f79291b` / `91e4b11d…c097ca39` |
+| Feature build it depends on | Production Task 2.4 run of `scripts/build_lanl_features.py` on the shared Days 1–30 dataset (Member 1's pipeline, unchanged). `preprocessing.json` SHA-256 `a05c68be…bf35f2908`; feature config `e68cb98f…`; split policy `c5e3d5d8…` |
+
+Re-scoring or re-exporting requires that exact feature build. `export_sequence_scores.py` refuses a different preprocessing artifact, and `FrozenSequenceDetector.load` refuses a different feature configuration or split policy. If the team shares one feature build (recommended: Member 1's call), check its `preprocessing.json` hash against the one above. Reading the exported scores does not require the feature build.
+
 ## 1. What is delivered and where
 
 | Artifact | Location | In Git? |
@@ -10,8 +27,8 @@ This note lists what the short-term sequence detector (Tasks 3.1–3.4) gives do
 | Sequence manifest (Task 3.1 counts and statuses) | `data/manifests/lanl_sequences_v1.json` | Yes |
 | Selection, calibration and freeze record (Task 3.3) | `data/manifests/sequence_detector_v1.json` | Yes |
 | Small handoff samples (score rows, padded tensors) | `data/samples/sequence_scores_sample/`, `data/samples/sequence_tensors_sample/` | Yes |
-| Frozen detector (`frozen_detector.json` + `checkpoint.pt`) | team Google Drive: `DualScope/artifacts/sequence_detector/<model_version>/` | No |
-| Full user-hour scores, days 1–30 (one zip per split) + `summary.json` | same Drive folder | No |
+| Frozen detector (`frozen_detector.json` + `checkpoint.pt`), 0.1 MB zip | team Google Drive: `DualScope/artifacts/sequence_detector/seq-gru-ae-v1-L32-h32-91e4b11d34/` | No |
+| Full user-hour scores, days 1–30: train 448 MB, validation 692 MB, test 999 MB zips + `summary.json` | same Drive folder | No |
 
 The Drive folder contains `README.txt` and `SHA256SUMS.txt`. After downloading:
 
@@ -41,7 +58,8 @@ Every row carries `model_version`. A retrained or re-exported detector gets a ne
 
 - A user-hour with no events has **no row** unless requested; absence means `no_activity`.
 - Null scores are **unavailable, never 0**. Sequence-only, graph-only and neither cases should come from these statuses, not from zero-filling.
-- To get explicit `no_activity` rows for your evaluation cohort (for example labelled user-hours or controls), send a CSV or Parquet file with `user_id, window_start`. I re-export with `--requested-units`, which adds only rows; existing scores are unchanged.
+- To get explicit `no_activity` rows for your evaluation cohort (for example labelled user-hours or controls), send a CSV or Parquet file with `user_id, window_start`. I re-export with `--requested-units`, which adds only rows; existing scores are unchanged. The current export includes one demonstration row (`U10002@DOM1`, window 756001), built from a label-free gap in that user's activity.
+- In validation, all 220 labelled user-hours had events and received a score (coverage 1.0). Positives without events would still be reported as unscored rather than dropped.
 
 ### Score meaning and threshold
 
@@ -63,7 +81,9 @@ Every row carries `model_version`. A retrained or re-exported detector gets a ne
 ```python
 import pyarrow.dataset as ds
 
-scores = ds.dataset("outputs/sequence_scores/<model_version>/scores", format="parquet", partitioning="hive")
+scores = ds.dataset(
+    "outputs/sequence_scores/seq-gru-ae-v1-L32-h32-91e4b11d34/scores", format="parquet", partitioning="hive"
+)
 validation = scores.to_table(
     columns=["user_id", "window_start", "window_end", "score_available_at", "status", "raw_score", "score", "is_alert"],
     filter=ds.field("split") == "validation",

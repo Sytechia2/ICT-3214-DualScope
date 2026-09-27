@@ -11,6 +11,17 @@ This repository is being built from the shared workplans in:
 
 ## Current status
 
+Tasks 3.1–3.4, the short-term sequence detector, are implemented and frozen:
+
+- **3.1 Sequences:** 11,846,723 acting-user/hour sequences, with zero boundary violations and Day 1 marked as warm-up.
+- **3.2 Models:** six GRU sequence autoencoders trained on 2,238,183 eligible training user-hours.
+- **3.3 Selection:** the settings were chosen on validation data only.
+- **3.4 Export:** calibrated 0–1 user-hour scores with explicit statuses and retrievable `auth.txt` evidence were exported for Days 1–30.
+
+The selected model (`seq-gru-ae-v1-L32-h32-91e4b11d34`) reaches validation average precision 0.0060 (102× the 5.9 × 10⁻⁵ prevalence) and ROC-AUC 0.88. At its max-F1 threshold it gives 37.8 alerts per day with 3.2% precision and 5.0% recall. These are weak standalone user-hour results, reported as found. Test labels were not used.
+
+The detector was fitted on a production run of the Task 2.4 pipeline (all 508,854,306 events reconciled). Checkpoints and full scores are shared outside Git. See [the sequence detector guide](docs/sequence_detector.md), [the downstream handoff](docs/sequence_detector_handoff.md), and the [sequence](data/manifests/lanl_sequences_v1.json) and [selection](data/manifests/sequence_detector_v1.json) manifests.
+
 Task 2.4 shared historical features are implemented. The streaming two-pass pipeline preserves `source_reference` in raw and transformed feature rows. A documented representative pilot processed and reconciled 15.8 million real authentication events; the full 30-day feature output is a separate run and has not been produced. See [the feature guide](docs/lanl_features.md) and [its manifest](data/manifests/lanl_features_v1.json).
 
 Task 2.5 evidence lookup and provenance helpers are implemented. `AuthenticationEvidenceLookup` resolves accepted `auth.txt:<source_line>` references to normalized events and their retained raw record; carrier helpers attach ordered references to sequence and graph evidence and support paging. The checked-in sample demonstrates end-to-end tracing, but it is synthetic sample data rather than a real detector incident. See [the evidence guide](docs/evidence_references.md).
