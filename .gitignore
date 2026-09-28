@@ -46,3 +46,8 @@ config/*.local.toml
 # Local Windows ingestion launch/monitor helpers
 scripts/start_lanl_ingestion.ps1
 scripts/check_lanl_ingestion.ps1
+
+# Justin's stuff
+docs/Security_Analytics_Proposal.pdf
+docs/fusion_implementation_plan.md
+*.egg-info/
