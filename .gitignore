@@ -17,6 +17,8 @@ env/
 !.env.example
 
 # Local data and generated artifacts
+# Team-shared LANL copy kept at the repository root; everyone has it, so it is never committed.
+dataset/
 data/raw/*
 data/processed/*
 models/*
