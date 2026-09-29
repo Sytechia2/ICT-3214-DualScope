@@ -47,6 +47,16 @@ python scripts/smoke_test.py
 
 The smoke check uses only the tracked synthetic fixture and does not require LANL data, model checkpoints or external service credentials.
 
+## Incident dashboard (Task 7.1)
+
+Install `requirements.txt`, then launch the read-only analyst dashboard from the repository root:
+
+```powershell
+streamlit run scripts/incident_dashboard.py
+```
+
+It opens the tracked **Synthetic fixture** (`data/fixtures/incidents_mock.jsonl`) by default. These records and their score and evidence fields are illustrative, not detector results, traceable evidence, or a live feed. Select **Local JSONL export** in the sidebar and enter a local path to view a saved full incident export from `scripts/align_and_fuse_scores.py --incidents-output <path>.jsonl`. The dashboard identifies this as a saved file, not a live feed, and reports missing or malformed files without switching to the fixture. Incident times are dataset-relative seconds, with half-open `[start, end)` ranges. The dashboard consumes packaged incidents only; it does not run detectors. The current Parquet incident export omits nested detector scores, so this dashboard accepts JSONL.
+
 ## Planned top-level layout
 
 ```text
