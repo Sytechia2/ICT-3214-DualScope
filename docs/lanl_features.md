@@ -128,7 +128,7 @@ day_one_events = features.to_table(filter=day_filter, columns=model_cols)
 ```
 
 ### Member 3: Long-Term Graph Detector (Task 4.1)
-Member 3 aggregates rolling authentication edges using source and destination computers and novelty flags:
+Member 3 builds the unsupervised GAE from `acting_user → destination_computer` edges. The separate confirmed-relationship extension also retains `source_computer` and matches exact user/source/destination triples. Both paths preserve source references:
 
 ```python
 import pyarrow.dataset as ds
@@ -140,7 +140,7 @@ features = ds.dataset(
 )
 
 graph_cols = [
-    "timestamp", "source_computer", "destination_computer",
+    "timestamp", "acting_user", "source_computer", "destination_computer",
     "source_reference", "is_new_host_connection", "authentication_result",
 ]
 

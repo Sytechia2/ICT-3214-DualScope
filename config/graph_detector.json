@@ -1,0 +1,36 @@
+{
+  "description": "Long-term authentication graph detector (Tasks 4.1-4.4). Values are frozen only after validation selection.",
+  "policy": {
+    "window_seconds": 86400,
+    "stride_seconds": 86400,
+    "warmup_seconds": 86400,
+    "success_weight": 1.0,
+    "failure_weight": 0.25,
+    "evidence_references_per_edge": 100
+  },
+  "model": {
+    "input_size": 9,
+    "hidden_size": 32,
+    "latent_size": 16,
+    "dropout": 0.0
+  },
+  "training": {
+    "seed": 42,
+    "negative_ratio": 1.0,
+    "learning_rate": 0.001,
+    "weight_decay": 0.00001,
+    "max_epochs": 20,
+    "early_stopping_patience": 4,
+    "max_positive_edges_per_snapshot": 200000
+  },
+  "search": {
+    "window_seconds": [86400, 259200, 604800],
+    "latent_sizes": [8, 16, 32],
+    "aggregations": ["max", "top3_mean", "top5_mean"],
+    "selection_metric": "average_precision",
+    "threshold_objective": "max_f1"
+  },
+  "aggregation": "top3_mean",
+  "maximum_score_age_seconds": 86400,
+  "top_evidence_edges": 5
+}
