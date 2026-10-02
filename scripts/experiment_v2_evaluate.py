@@ -59,6 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--budget", type=int, default=38, help="Alerts per validation day (v1 raised 37.8/day)")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--output", type=Path, default=REPO_ROOT / "outputs/experiment_v2/results.json")
+    parser.add_argument("--units-output", type=Path, help="Also write per-unit raw scores (parquet), one column per variant:aggregation")
     parser.add_argument("--allow-pilot-features", action="store_true")
     return parser.parse_args()
 
@@ -124,6 +125,7 @@ def main() -> int:
         "test_labels_used": False,
         "variants": {},
     }
+    unit_scores: dict[str, pd.DataFrame] = {}
     for name, run_dir in runs.items():
         run_dir = Path(run_dir)
         manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
@@ -160,6 +162,10 @@ def main() -> int:
         frame["label"] = unit_labels(frame["user"].to_numpy(), frame["hour"].to_numpy(), positives)
         frame["machine"] = is_machine(frame["user"].to_numpy())
 
+        if args.units_output:
+            unit_scores[name] = frame[["user", "hour", "day"]].assign(
+                **{f"{v}:{a}": np.concatenate(parts) for v in variants for a, parts in raw[v].items()}
+            )
         for variant, scale in variants.items():
             entry = {
                 "run": name,
@@ -174,6 +180,13 @@ def main() -> int:
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    if args.units_output:
+        merged = None
+        for part in unit_scores.values():
+            merged = part if merged is None else merged.merge(part, on=["user", "hour", "day"], how="outer", validate="1:1")
+        args.units_output.parent.mkdir(parents=True, exist_ok=True)
+        merged.to_parquet(args.units_output, index=False)
+        print(f"Per-unit scores written to {args.units_output} ({len(merged):,} rows)")
 
     print(f"\n{'variant':<12} {'agg':<15} {'AP':>8} {'ROC':>6} {'TP@budget':>10} {'machine/human':>14} {'day AP':>8} {'day TP@b':>9}")
     for variant, entry in results["variants"].items():

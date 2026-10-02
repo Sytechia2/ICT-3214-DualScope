@@ -2,7 +2,7 @@
 
 Owner: Member 1 (data prep), building on Member 2's sequence detector.
 Results: `outputs/experiment_v2/results.json` and `rules.json` (not in Git). Logs: `logs/experiment_v2/`.
-Branch: `experiment/features-v2`. Status: **done (2026-10-02)**. Result: **no clear improvement**; the success rule was not met (see results log).
+Branch: `experiment/features-v2`. Status: **done (2026-10-02)**. Result: **no clear improvement**; the success rule was not met (see results log). Follow-up Option A (supervised fusion): **success rule met** by gradient boosting (16 vs 4 attacks at 38 alerts/day on days 13–16); see its section below.
 
 ## In plain words
 
@@ -153,6 +153,65 @@ Report for A, B and C:
 | Count either flag | 0.00733 | 0.895 | 7 / 220 | 264 / 78 | 0.0191 | 8 / 135 |
 
 Reading: a one-line counting rule roughly matches the trained GRU (slightly higher AP, about the same number of attacks in the top alerts). So the GRU adds little beyond counting novel logins. The ceiling at the top of the list is shared: novel logins are common, and busy machine accounts fill the alert budget for every scorer.
+
+## Follow-up: Option A, supervised fusion quick test (plan fixed 2026-10-02, before any results)
+
+**Question.** If a simple model learns from the labelled validation attacks how to combine the GRU score with hourly counts, does it clearly beat the GRU alone? This tests the proposal's "validation-tuned weighted fusion" in its most flexible form. Unlike everything above, it is **supervised**: it uses validation labels for training, not only for evaluation.
+
+**Units.** One row per validation user-hour (acting user, hour), days 8–16: the same 3,745,355 units and 220 positives as above.
+
+**Inputs (label-free, no user or computer names):**
+
+| Input | Definition |
+| --- | --- |
+| `gru_max_event` | Run A's raw `max_event` score (= Member 2's v1 model, rebuilt), re-scored on GPU |
+| `n_events` | events in the user-hour |
+| `n_failures` | `authentication_result == "Fail"` |
+| `n_sources`, `n_destinations` | distinct source / destination computers |
+| `n_new_user_source`, `n_new_host_connection`, `n_new_user_destination` | events with that novelty flag |
+| `n_ntlm`, `n_network_logon`, `n_logon` | `authentication_type == "NTLM"`, `logon_type == "Network"`, `authentication_orientation == "LogOn"` |
+| `is_machine_account` | account name ends with `$` |
+
+**Labels:** `load_positive_user_hours` (validation only).
+
+**Split by time:** fit on days 8–12, evaluate on days 13–16. Days 17–30 are not built, scored or read.
+
+Label counts per day (counted before fitting anything; these are counts, not results): day 8: 1, day 9: 82, day 10: 1, days 11–12: 0, so **84 training positives, 82 of them from one day**; days 13–16: 68 / 36 / 15 / 17 = **136 test positives**. 97 users in total, 17 of them in both halves. The models therefore learn mostly from a single day's attack burst.
+
+**Models (settings fixed now, no tuning on days 13–16):**
+- Logistic regression: `log1p` of every count, `log(gru_max_event + 1e-12)`, `is_machine_account` as 0/1, then `StandardScaler`; `LogisticRegression(class_weight="balanced", C=1.0, max_iter=2000)`.
+- `HistGradientBoostingClassifier(class_weight="balanced", random_state=0)`, other settings scikit-learn defaults (its default early stopping holds out 10% of the **training** days).
+
+**Compared on days 13–16:** GRU alone, counting rule "either" (events with `is_new_user_source` or `is_new_host_connection`, as in the rules follow-up; a comparator only, not a model input), logistic regression, gradient boosting. Metrics from `experiment_v2_evaluate.evaluate`: AP, ROC-AUC, TP in the top 38 user-hours per day, machine/human split of those alerts, the user-day versions. Ties are broken by the same fixed random order (seed 0) as the rules. Feature importance: standardised coefficients (LR), and permutation importance on days 13–16 scored by AP (5 repeats; for reporting only).
+
+**Success rule (fixed):** a real gain only if a model catches **≥ 2× the GRU's true positives at 38/day on days 13–16** **and** has **higher AP** than the GRU there. Edge case fixed in advance: if the GRU catches 0 on days 13–16, the model must catch at least 2.
+
+### Option A results (2026-10-02)
+
+Run: `scripts/experiment_v2_evaluate.py --run A=... --units-output outputs/experiment_v2/units_A.parquet` (re-score on GPU; reproduces AP 0.00598 and 8 of 220 exactly, log `rescore_A.log`), then `scripts/experiment_v2_fusion.py` (log `fusion.log`, numbers `outputs/experiment_v2/fusion.json`). Fit on days 8–12 (1,969,281 user-hours, 84 positive). All rows below are days 13–16: 1,776,074 user-hours, 136 positive user-hours, 88 positive user-days, 38 alerts per day = 152 alerts.
+
+| Scorer | AP | ROC-AUC | TP at 38/day | Alerts machine / human | User-day AP | User-day TP at 38/day |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| GRU, run A (`max_event`) | 0.00457 | 0.839 | 4 / 136 | 82 / 70 | 0.0114 | 6 / 88 |
+| Count either flag | 0.00670 | 0.849 | 4 / 136 | 120 / 32 | 0.0149 | 3 / 88 |
+| Logistic regression | 0.01901 | 0.978 | 4 / 136 | 0 / 152 | 0.0508 | 18 / 88 |
+| **Gradient boosting** | **0.04984** | 0.817 | **16 / 136** | 0 / 152 | **0.0802** | 17 / 88 |
+
+**Success rule: met by gradient boosting** (16 ≥ 2 × 4, and AP 0.0498 > 0.00457, about 11×). **Not met by logistic regression** (same 4 TP at 38/day, although its AP is 4× the GRU's and it finds the most attack user-days).
+
+Feature importance (permutation, AP drop on days 13–16):
+- Gradient boosting: `n_ntlm` 0.046, `is_machine_account` 0.045, `n_new_host_connection` 0.042, `n_new_user_source` 0.038, `gru_max_event` 0.034. It uses the GRU score, but as one input among several.
+- Logistic regression: `n_network_logon`, `n_ntlm`, `n_new_user_source`, `gru_max_event`, `n_events`, each about 0.015. Its top alerts are very busy human accounts (median 5,460 events per hour); it ranks attacks well overall (ROC-AUC 0.978) but not at the very top.
+
+Checks (for interpretation only; they don't change the verdict):
+- **Not one burst:** the 16 hits come from 13 different users and all four days (10 / 2 / 3 / 1 on days 13 / 14 / 15 / 16). The GRU's 4 hits come from 4 users on days 13–14.
+- **Ties don't explain it:** gradient boosting outputs only 1,204 distinct scores, but the 38th-place cut-off only splits ties without positives, except day 15, where all tied rows fit in the budget. TP at 38/day is 16 under 20 different tie-break orders (and "either" is 4 under all 20).
+- **About half of the gain is "ignore machine accounts":** both models raise zero machine-account alerts, and no validation positive is a machine account. Post hoc, restricting the label-free scorers to human accounts gives GRU 8 TP (AP 0.0100) and "either" 6 TP (AP 0.0150). Gradient boosting still catches 2× that, with 3–5× the AP.
+- **Overfitting:** gradient boosting's AP on its own training days is 0.39 vs 0.050 on days 13–16, and it learned mostly from one day (day 9). It still generalised to later days and new users, but it has only ever seen one red-team campaign.
+
+**Reading.** Learning from labelled attacks clearly beats the GRU at our alert budget on unseen days: 4× the attacks in the top 38 per day. Part of that comes from learning that machine accounts are never attackers here, which a fixed filter could also do; the rest comes from combining NTLM use, novelty counts and the GRU score. The model learns *this* red team's profile (NTLM network logons to new hosts), so it may miss attacks that look different. This is a limitation to state in the report.
+
+**Next (needs team agreement, not done):** agree to use labels for fusion; refit on days 8–16 with the same fixed settings; freeze; score the test days once; add Member 3's graph score as an input when it exists.
 
 ## Out of scope (for now)
 
