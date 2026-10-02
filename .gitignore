@@ -51,3 +51,5 @@ scripts/check_lanl_ingestion.ps1
 docs/Security_Analytics_Proposal.pdf
 docs/fusion_implementation_plan.md
 *.egg-info/
+seq-gru-ae-v1-L32-h32/
+lanl_auth_days_01_30.7z
