@@ -211,7 +211,23 @@ Checks (for interpretation only; they don't change the verdict):
 
 **Reading.** Learning from labelled attacks clearly beats the GRU at our alert budget on unseen days: 4× the attacks in the top 38 per day. Part of that comes from learning that machine accounts are never attackers here, which a fixed filter could also do; the rest comes from combining NTLM use, novelty counts and the GRU score. The model learns *this* red team's profile (NTLM network logons to new hosts), so it may miss attacks that look different. This is a limitation to state in the report.
 
-**Next (needs team agreement, not done):** agree to use labels for fusion; refit on days 8–16 with the same fixed settings; freeze; score the test days once; add Member 3's graph score as an input when it exists.
+**Next:** refit on days 8–16 with the same fixed settings, freeze, score the test days once (below). Decision by Member 1 (2026-10-02): this is the final model; the graph score is not added.
+
+## Final test on days 17–30 (plan fixed 2026-10-02, before any test-day data was built)
+
+**Frozen model.** `scripts/experiment_v2_freeze_fusion.py` → `models/fusion/experiment_v2/frozen/` (`model.joblib` + `manifest.json`): gradient boosting, settings unchanged, refitted on all of days 8–16 (3,745,355 user-hours, 220 positives; 39 boosting iterations), code at commit `85b0ff1`, model sha256 `bf9ffc58be29…`. GRU input: run A `max_event`. Nothing is changed after this point.
+
+**Test features.** New v2 build of days 1–30 (`data/processed/lanl_features_v2_days_01_30`, same config, 12 workers). The novelty flags are cumulative from day 1, so days 1–16 must be rebuilt too. Before any test label is read, the run checks that this build reproduces the validation inputs: same preprocessing file hash as run A was trained with, and day 16's GRU scores and hourly counts equal the ones the model was fitted on.
+
+**Units.** User-hours on days 17–30 that the GRU scores (status available). Test positives outside those units count as misses (recall is over all test positives).
+
+**Scored once, in this order:** GRU scores and counts for all test days → frozen model predictions → saved to disk → only then are test labels read (`load_positive_user_hours(..., "test", allow_test=True)`). The script refuses to run again if its output exists.
+
+**Reported (same metrics and tie-break as Option A):** for the frozen model, the GRU alone, the counting rule "either", and, because Option A showed about half the gain comes from ignoring machine accounts, GRU and "either" restricted to human accounts. Also per-day TP and distinct users among hits.
+
+**Test success rules (fixed):**
+1. Primary: the frozen model catches **≥ 2× the GRU's TP at 38/day** (at least 2 if the GRU catches 0) **and** has **higher AP** than the GRU on days 17–30.
+2. Secondary: the frozen model catches **more TP at 38/day and has higher AP** than the GRU restricted to human accounts. This shows whether the model adds anything beyond a machine-account filter.
 
 ## Out of scope (for now)
 
