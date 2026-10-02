@@ -26,12 +26,13 @@ Caveats for the report:
 
 ## What's left: the one-time test on days 17–30
 
-Everything below is on `main`. Our trained models aren't in Git, so you rebuild them; the settings are fixed and the steps are deterministic, so your numbers should match ours (checkpoints below). Use the project's `.venv` (Python 3.12 or 3.13).
+Everything below is on branch `experiment/features-v2` (not merged into `main`). Our trained models aren't in Git, so you rebuild them; the settings are fixed and the steps are deterministic, so your numbers should match ours (checkpoints below). Use the project's `.venv` (Python 3.12 or 3.13).
 
 **Memory warning:** the feature build with `--workers 12` needs about 58 GB of memory. On a 32 GB machine use `--workers 4` (roughly 20 GB, our estimate; slower) and don't use the PC for heavy work while it runs. Any worker count is fine because you rebuild everything from the same build.
 
 ```powershell
-git checkout main
+git fetch origin
+git checkout experiment/features-v2
 git pull
 ```
 

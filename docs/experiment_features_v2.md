@@ -217,7 +217,7 @@ Checks (for interpretation only; they don't change the verdict):
 
 **Frozen model.** `scripts/experiment_v2_freeze_fusion.py` → `models/fusion/experiment_v2/frozen/` (`model.joblib` + `manifest.json`): gradient boosting, settings unchanged, refitted on all of days 8–16 (3,745,355 user-hours, 220 positives; 39 boosting iterations), code at commit `85b0ff1`, model sha256 `bf9ffc58be29…`. GRU input: run A `max_event`. Nothing is changed after this point.
 
-**Who runs it:** this laptop (31 GB RAM) couldn't run the days 1–30 build with 12 workers. The team reruns steps 1–6 of [supervised_fusion_handover.md](supervised_fusion_handover.md) from `main` on their machine: same code and fixed settings, so the refrozen model is the same model up to tiny numeric differences, and its own manifest records its hash.
+**Who runs it:** this laptop (31 GB RAM) couldn't run the days 1–30 build with 12 workers. The team reruns steps 1–6 of [supervised_fusion_handover.md](supervised_fusion_handover.md) from branch `experiment/features-v2` on their machine: same code and fixed settings, so the refrozen model is the same model up to tiny numeric differences, and its own manifest records its hash.
 
 **Test features.** New v2 build of days 1–30 (`data/processed/lanl_features_v2_days_01_30`, same config, 12 workers). The novelty flags are cumulative from day 1, so days 1–16 must be rebuilt too. Before any test label is read, the run checks that this build reproduces the validation inputs: same preprocessing file hash as run A was trained with, and day 16's GRU scores and hourly counts equal the ones the model was fitted on.
 
