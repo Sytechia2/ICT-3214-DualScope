@@ -22,13 +22,24 @@ def evaluate_fused_scores(
     threshold: float | None = None,
 ) -> dict:
     """Evaluate fused score parquet against red-team labels."""
-    print(f"Loading fused scores from {fused_path}...")
+    print(f"Loading scores from {fused_path}...")
     fused_ds = ds.dataset(str(fused_path), format="parquet")
-    fused_table = fused_ds.to_table(columns=["user_id", "window_start", "fused_score", "is_fused_alert"])
+    schema_names = fused_ds.schema.names
+    score_col = "fused_score" if "fused_score" in schema_names else "score"
+    if score_col not in schema_names:
+        raise ValueError(f"Neither 'fused_score' nor 'score' found in columns: {schema_names}")
+
+    cols = ["user_id", "window_start", score_col]
+    if "is_fused_alert" in schema_names:
+        cols.append("is_fused_alert")
+    elif "is_alert" in schema_names:
+        cols.append("is_alert")
+
+    fused_table = fused_ds.to_table(columns=cols)
 
     users = fused_table["user_id"].to_pylist()
     windows = fused_table["window_start"].to_pylist()
-    scores = fused_table["fused_score"].to_numpy()
+    scores = fused_table[score_col].to_numpy()
 
     # Filter only available scores
     valid_mask = np.isfinite(scores)
@@ -36,11 +47,11 @@ def evaluate_fused_scores(
     windows = [w for w, v in zip(windows, valid_mask) if v]
     scores = scores[valid_mask]
 
-    print(f"Loaded {len(scores)} valid user-hours.")
+    print(f"Loaded {len(scores)} valid user-hours (column: '{score_col}').")
 
     # Load redteam labels
     print(f"Loading redteam labels from {labels_dir}...")
-    labels_ds = ds.dataset(str(labels_dir), format="parquet")
+    labels_ds = ds.dataset(str(labels_dir), format="parquet", partitioning="hive")
     labels_table = labels_ds.to_table()
     
     redteam_units = set()
