@@ -158,6 +158,19 @@ def parse_args() -> argparse.Namespace:
         help="Execute Pass 2 only (transform raw features using existing preprocessing artifact).",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Parallel build with this many user shards (opt-in; 1 = the sequential build). "
+             "Rows within a day are then grouped by shard rather than in input order.",
+    )
+    parser.add_argument(
+        "--assembly-workers",
+        type=int,
+        default=8,
+        help="Days assembled and transformed concurrently in a parallel build.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Overwrite existing output directory if it exists.",
@@ -248,11 +261,38 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
     pass1_events = 0
     pass2_events = 0
     mem_stats: dict[str, Any] = {}
+    parallel_info: dict[str, Any] | None = None
+
+    workers = getattr(args, "workers", 1)
+    if workers > 1:
+        if args.raw_only or args.transform_only or args.pilot_rows is not None:
+            raise ValueError("--workers > 1 supports full builds only (no --raw-only, --transform-only or --pilot-rows)")
+        from dualscope.features.parallel import build_features_parallel
+
+        result = build_features_parallel(
+            events_dir=args.events,
+            out_dir=out_dir,
+            feature_config_path=args.feature_config,
+            splits_config_path=args.splits_config,
+            excluded_users=excluded_users,
+            preprocessing_path=preprocessing_file,
+            workers=workers,
+            max_day=args.pilot_days,
+            batch_size=args.batch_size,
+            assembly_workers=getattr(args, "assembly_workers", 8),
+            mode="pilot" if args.pilot_mode else "production",
+            is_production=not args.pilot_mode,
+        )
+        preprocessor = result["preprocessor"]
+        pass1_events, pass2_events = result["pass1_events"], result["pass2_events"]
+        pass1_duration, pass2_duration = result["pass1_seconds"], result["pass2_seconds"]
+        mem_stats = result["memory"]
+        parallel_info = result["parallel"]
 
     # =========================================================================
     # PASS 1: Generate Raw Features and Accumulate Training Statistics
     # =========================================================================
-    if not args.transform_only:
+    if not args.transform_only and parallel_info is None:
         p1_start = time.time()
         print(f"[Pass 1] Generating raw features and accumulating training statistics from {args.events}...")
         raw_out_dir.mkdir(parents=True, exist_ok=True)
@@ -347,7 +387,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
     # =========================================================================
     # PASS 2: Frozen Transformation
     # =========================================================================
-    if not args.raw_only:
+    if not args.raw_only and parallel_info is None:
         p2_start = time.time()
         print(f"[Pass 2] Transforming raw features using frozen preprocessor from {preprocessing_file}...")
         transformed_out_dir.mkdir(parents=True, exist_ok=True)
@@ -423,6 +463,10 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
             "memory_breakdown": mem_stats,
         },
     }
+    if parallel_info is not None:
+        summary["parallel_build"] = parallel_info
+    if args.pilot_days is not None:
+        summary["inputs"]["max_dataset_day"] = args.pilot_days
 
     summary_file = out_dir / "summary.json"
     summary_file.write_text(json.dumps(summary, indent=2), encoding="utf-8")

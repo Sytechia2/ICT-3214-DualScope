@@ -30,6 +30,8 @@ The pipeline enforces an **explicit two-pass architecture**:
 | `prior_user_destination_count_24h` | `int64` | `(acting_user, destination_computer)` | 86,400 s | Count of prior records for this user-destination pair in window. | Default 0 if no prior records for this pair. | Raw Feature / Transformed Model Input | $\log(1 + x)$, then standardized $(z - \mu)/\sigma$. |
 | `is_new_user_destination` | `bool` / `float32` | `(acting_user, destination_computer)` | Entire replay | True only on the first appearance of this `(user, destination)` pair. | None (always True or False). | Model Input (Binary) | Cast to `float32` (`1.0` if True, `0.0` if False). |
 | `is_new_host_connection` | `bool` / `float32` | `(source_computer, destination_computer)` | Entire replay | True only on the first appearance of this directed host edge. | None (always True or False). | Model Input (Binary) | Cast to `float32` (`1.0` if True, `0.0` if False). |
+| `is_new_user_source` | `bool` / `float32` | `(acting_user, source_computer)` | Entire replay | True only on the first appearance of this `(user, source)` pair, i.e. the first time the user authenticates from this computer. | None (always True or False). | Model Input (Binary) in `lanl_features_v2.json` only | Cast to `float32` (`1.0` if True, `0.0` if False). |
+| `is_machine_account` | `bool` / `float32` | `acting_user` | None | True when the account name before `@` ends with `$` (a computer account). | None (always True or False). | Model Input (Binary) in `lanl_features_v2.json` only | Cast to `float32` (`1.0` if True, `0.0` if False). |
 | `history_complete_1h` | `bool` | Dataset time | 3,600 s | True when $t \ge t_{\text{start}} + 3600$. | None (always True or False). | Metadata / Filter Flag | Retained as metadata; excluded from default model inputs. |
 | `history_complete_24h` | `bool` | Dataset time | 86,400 s | True when $t \ge t_{\text{start}} + 86400$. | None (always True or False). | Metadata / Filter Flag | Retained as metadata; excluded from default model inputs. |
 | `auth_type_id` | `int32` | None | N/A | Preserves original string in metadata. | Categorical vocabulary. | Model Input (Categorical) | `0` = UNSEEN, `1` = MISSING, `2+` = sorted training categories. |
@@ -224,6 +226,18 @@ python scripts/build_lanl_features.py `
   --feature-config config/lanl_features.json `
   --output data/processed/lanl_features_days_01_30 `
   --batch-size 131072
+```
+
+### 4. Parallel Build and v2 Features (experiment)
+`--workers N` shards users across `N` processes (`src/dualscope/features/parallel.py`). Every feature except `is_new_host_connection` depends only on the acting user's own history; that one is computed in a separate pass over all events and joined back by `source_line`. Output rows and values match the sequential build (`tests/test_parallel_features.py`), but rows within a day are grouped by shard, so sort by `(timestamp, source_line)` when order matters. Scaling statistics can differ in the last floating-point digits because moments are merged in a different order.
+
+`config/lanl_features_v2.json` adds `is_new_user_source` and `is_machine_account` as model inputs. Both columns are computed in every build, so the v1 configuration and its columns are unchanged.
+
+```powershell
+python scripts/build_lanl_features.py `
+  --feature-config config/lanl_features_v2.json `
+  --pilot-days 16 --workers 12 `
+  --output data/processed/lanl_features_v2_days_01_16
 ```
 
 ---
