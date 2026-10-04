@@ -59,6 +59,7 @@ def run_pipeline(
     temporal_lookback: int = 86400,
     incidents_output: Path | None = None,
     incident_merge_gap: int = 7200,
+    known_signatures_path: Path | None = None,
 ) -> dict[str, Any]:
     """Execute alignment, fusion, and optional incident generation end-to-end."""
     print(f"Loading sequence records from {seq_path}...")
@@ -132,7 +133,18 @@ def run_pipeline(
             temporal_fused_rows = fused_rows
 
         inc_cfg = IncidentConfig(max_merge_gap_seconds=incident_merge_gap)
-        clusterer = IncidentClusterer(inc_cfg)
+        known_signatures = None
+        if known_signatures_path and known_signatures_path.exists():
+            from dualscope.graph.threat_history import ThreatHistory
+            import pyarrow.dataset as ds
+            labels_ds = ds.dataset(str(known_signatures_path), format="parquet")
+            labels_rows = labels_ds.to_table().to_pylist()
+            day = temporal_fused_rows[0].dataset_day if temporal_fused_rows else 1
+            freeze_ts = (day - 1) * 86400 + 1
+            known_signatures = ThreatHistory.from_labels(labels_rows, frozen_before=freeze_ts)
+            print(f"Loaded {len(known_signatures.triples)} confirmed threat signatures frozen before ts={freeze_ts}.")
+
+        clusterer = IncidentClusterer(inc_cfg, known_signatures=known_signatures)
         incidents = clusterer.cluster_incidents(temporal_fused_rows)
         incidents_count = len(incidents)
         print(f"Clustered {len(incidents)} multi-hour incidents.")
@@ -210,6 +222,12 @@ def main() -> None:
         default=7200,
         help="Maximum gap in seconds between alert hours to merge into an incident (default: 7200)",
     )
+    parser.add_argument(
+        "--known-signatures",
+        type=Path,
+        default=None,
+        help="Path to red-team labels or confirmed threat history for rule-based incident tagging (Task 5.4)",
+    )
 
     args = parser.parse_args()
     run_pipeline(
@@ -225,6 +243,7 @@ def main() -> None:
         temporal_lookback=args.temporal_lookback,
         incidents_output=args.incidents_output,
         incident_merge_gap=args.incident_merge_gap,
+        known_signatures_path=args.known_signatures,
     )
 
 
