@@ -45,7 +45,7 @@ def _load_records(path: Path) -> list[dict]:
 
 def _load_redteam_positives(labels_dir: Path) -> set[tuple[str, int]]:
     """Load red-team positive user-hours (user, hour_start)."""
-    dataset = ds.dataset(str(labels_dir), format="parquet")
+    dataset = ds.dataset(str(labels_dir), format="parquet", partitioning="hive")
     table = dataset.to_table()
     positives = set()
     for row in table.to_pylist():
