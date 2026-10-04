@@ -215,7 +215,39 @@ def run_comparison_matrix(
         metrics["description"] = desc
         results.append(metrics)
 
-    # 6. Format and Print Markdown Table
+    # 6. Optional Incident-Level Triage Evaluation (Task 5.4 Advantage)
+    inc_triage_metrics = {}
+    if incidents_path and incidents_path.exists():
+        p_by_user_hour = {(usr, win): prob for usr, win, prob in zip(users, windows, sup_probs)}
+        red_users = {str(r["user"]) for r in labels_rows if ((int(r["timestamp"]) - 1) // 86400 + 1) == day}
+        
+        with open(incidents_path, "r", encoding="utf-8") as f:
+            inc_records = [json.loads(line) for line in f]
+        
+        for inc in inc_records:
+            usr = inc["user_id"]
+            st = inc["start_time"]
+            et = inc["end_time"]
+            probs = [p_by_user_hour.get((usr, h), 0.0) for h in range(st, et, 3600)]
+            inc["sup_score"] = max(probs) if probs else inc.get("max_fused_score", 0.0)
+            
+        inc_records.sort(key=lambda x: -x["sup_score"])
+        top_incidents = inc_records[:budget]
+        hit_incidents = [inc for inc in top_incidents if inc["user_id"] in red_users]
+        attack_hours_covered = sum(inc["duration_hours"] for inc in hit_incidents)
+        attack_accounts_caught = len({inc["user_id"] for inc in hit_incidents})
+        
+        inc_triage_metrics = {
+            "triaged_incidents_budget": budget,
+            "malicious_incidents_caught": len(hit_incidents),
+            "incident_precision_pct": round(len(hit_incidents) / budget * 100, 2),
+            "attack_hours_covered": attack_hours_covered,
+            "attack_hours_recall_pct": round(attack_hours_covered / num_attacks * 100, 2) if num_attacks else 0.0,
+            "distinct_attack_accounts_caught": attack_accounts_caught,
+            "caught_accounts": sorted(list({inc["user_id"] for inc in hit_incidents})),
+        }
+
+    # 7. Format and Print Markdown Table
     print("\n" + "=" * 90)
     print(f"        DUALSCOPE MASTER COMPARATIVE EVALUATION MATRIX (DAY {day:02d})")
     print(f"  Fixed Budget: {budget} alerts/day | Evaluated Units: {n_units:,} user-hours | Attacks: {num_attacks}")
@@ -244,6 +276,12 @@ def run_comparison_matrix(
     print(f"  Raw Fused Alerts: {total_raw_alerts} alerts/day")
     print(f"  Clustered Incidents: {total_incidents} incidents/day")
     print(f"  Triage Workload Reduction: {clustering_reduction_pct:.2f}% reduction in analyst alert volume.")
+    if inc_triage_metrics:
+        print("-" * 90)
+        print("Task 5.4 Incident-Level Triage (Reviewing Top 38 Incidents instead of isolated hours):")
+        print(f"  Malicious Incidents Caught: {inc_triage_metrics['malicious_incidents_caught']} / {budget} ({inc_triage_metrics['incident_precision_pct']}%)")
+        print(f"  Total Attack Hours Covered: {inc_triage_metrics['attack_hours_covered']} / {num_attacks} hours ({inc_triage_metrics['attack_hours_recall_pct']}% recall)")
+        print(f"  Distinct Attacker Accounts Caught: {inc_triage_metrics['distinct_attack_accounts_caught']} accounts: {inc_triage_metrics['caught_accounts']}")
     print("=" * 90 + "\n")
 
     matrix_report = {
@@ -256,6 +294,7 @@ def run_comparison_matrix(
             "clustered_incidents": total_incidents,
             "workload_reduction_pct": round(clustering_reduction_pct, 2),
         },
+        "incident_triage_metrics": inc_triage_metrics,
         "models": results,
     }
 
