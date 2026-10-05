@@ -2,120 +2,115 @@
 
 ## 1. Executive Summary & Evaluation Protocol
 
-This report provides the unified comparative benchmark for **DualScope**, evaluated according to the project evaluation protocol:
+This report provides the unified comparative benchmark for **DualScope**, evaluated under a rigorous out-of-sample temporal holdout protocol:
+
 1. **Identical Unit of Evaluation**: Every model is evaluated on the exact same unit: individual **user-hours** (`[window_start, window_start + 3600)`).
-2. **Identical Dataset & Split**: Evaluated on held-out validation Day 09 (482,781 scored user-hour units, containing 82 ground-truth red-team attack user-hours).
-3. **Identical SOC Operational Budget**: Fixed alert budget of **38 alerts/day**, matching realistic enterprise Security Operations Center (SOC) analyst capacity.
-4. **Strict Causal & Test Separation**: Parameters, weights, and classifiers were tuned exclusively on validation data (Days 8–16). Days 17–30 remain frozen for final test evaluation.
+2. **Proper Out-of-Sample Split**:
+   - **Training Set (Days 08–12)**: Used exclusively for fitting the `SupervisedFusionModel` and tuning fusion parameters. Contains 1,969,281 user-hours and 84 ground-truth red-team attack user-hours.
+   - **Test Set (Days 13–16)**: Held-out validation days completely unseen during model training. Contains 1,776,074 user-hours and 136 ground-truth red-team attack user-hours.
+   - **Frozen Test Set (Days 17–30)**: Kept strictly untouched and held back for the final one-time evaluation.
+3. **Empirical Alert Budget**: Fixed alert budget of **38 alerts/day** (152 total alerts across the 4-day evaluation period), established from Member 2's empirical GRU alert rate across validation days (340 alerts / 9 days ≈ 37.8 ≈ 38 alerts/day).
+4. **Primary vs. Operational Evaluation**:
+   - **Hourly Matrix (Primary)**: Standard benchmark across all individual detector architectures and fusion methods.
+   - **Incident Triage Matrix (Operational)**: Evaluates multi-hour incident envelopes from Task 5.4, with strict ground-truth temporal overlap and explicit analyst review hours reported.
 
 ---
 
-## 2. Unified Master Comparison Table
+## 2. Primary Hourly Benchmark Matrix (Test Days 13–16)
 
-Evaluation conducted at fixed SOC budget of **38 alerts/day** over 482,781 user-hours (Day 09 validation):
+Evaluated at the fixed budget of **38 alerts/day** (152 total alerts over 1,776,074 user-hours across Days 13–16; total ground-truth attacks = 136):
 
-| Model / Detection Architecture | Hits @ 38 Budget | Precision @ 38 | Recall @ 38 | PR-AUC (AP) | Best F1 | Architecture Role |
+| Model / Detection Architecture | Hits @ 152 Budget | Precision @ 152 | Recall @ 152 | PR-AUC (AP) | Best F1 | Architecture Role |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **GRU Alone (Sequence)** | 3 / 38 | 7.89% | 3.66% | 0.033194 | 0.1374 | Single-timescale short-term baseline |
-| **Graph GAE Alone** | 0 / 38 | 0.00% | 0.00% | 0.007819 | 0.0492 | Single-timescale long-term baseline |
-| **Baseline: Maximum Fusion** | 0 / 38 | 0.00% | 0.00% | 0.017111 | 0.0667 | Simple naive heuristic: max(seq, graph) |
-| **Baseline: Average Fusion** | 6 / 38 | 15.79% | 7.32% | 0.050298 | 0.1553 | Simple linear baseline: 0.5*seq + 0.5*graph |
-| **DualScope: Temporal Fusion** | 6 / 38 | 15.79% | 7.32% | 0.059224 | 0.1674 | Multi-timescale heuristic (tau=6h, boost=0.15) |
-| **DualScope: Supervised Fusion** | **12 / 38** | **31.58%** | **14.63%** | **0.119637** | **0.2567** | **DualScope Core: Seq + Graph + 2 Temporal Features** |
-| **Known-Attack Lookup** | 0 / 38 | 0.00% | 0.00% | 0.001498 | 0.0351 | Non-ML signature baseline (ThreatHistory) |
-| **DualScope Full Pipeline** | **12 / 38** | **31.58%** | **14.63%** | **0.119637** | **0.2567** | **Supervised Fusion + Signature Tag + Incident Envelopes** |
+| **GRU Alone (Sequence)** | 4 / 152 | 2.63% | 2.94% | 0.004572 | 0.0407 | Single-timescale short-term RNN autoencoder |
+| **Graph GAE Alone** | 1 / 152 | 0.66% | 0.74% | 0.001917 | 0.0206 | Single-timescale long-term graph autoencoder |
+| **Baseline: Maximum Fusion** | 0 / 152 | 0.00% | 0.00% | 0.003127 | 0.0241 | Simple naive baseline: max(seq, graph) |
+| **Baseline: Average Fusion (50/50)** | 8 / 152 | 5.26% | 5.88% | 0.012272 | 0.0714 | Simple linear baseline: 0.5*seq + 0.5*graph |
+| **DualScope: Temporal Fusion** | 8 / 152 | 5.26% | 5.88% | 0.013969 | 0.0714 | Multi-timescale heuristic (tau=6h, boost=0.15) |
+| **DualScope: Supervised Fusion** | **10 / 152** | **6.58%** | **7.35%** | **0.017321** | **0.0733** | **DualScope Core: Trained on Days 8–12** |
+| **Known-Attack Lookup** | 0 / 152 | 0.00% | 0.00% | 0.004253 | 0.0240 | Non-ML signature baseline (ThreatHistory) |
 
 ---
 
-## 3. Key Findings & Theoretical Insights
+## 3. Budget Sensitivity Curves (Days 13–16)
 
-### Did Fusion Beat Single-Timescale Models?
-- **Yes, decisively.** GRU sequence alone caught only 3 attacks out of 38 alerts (7.89% precision, AP 0.033). Graph GAE alone produced 0 hits in its top 38 alerts (AP 0.0078) because long-term graph aggregation dilutes rapid hourly credential attacks.
-- Combining both timescales via **DualScope Supervised Fusion** quadrupled the attack hits to **12 / 38 (31.58% precision)** and raised PR-AUC by **260%** (from 0.033194 to 0.119637).
+Performance across operational daily alert budgets (10, 25, 38, 50, and 100 alerts/day) over the 4 test days:
 
-### Did Supervised & Temporal Fusion Beat Simple Baselines?
-- **Yes.** 
-  - **Maximum Fusion** failed at the budget limit (0 hits @ 38) because it takes the union of high anomaly scores from both models, inheriting the false-positive extremes of each detector.
-  - **Average Fusion** (50/50) improved to 6 hits @ 38 (15.79% precision, AP 0.050), demonstrating that combining the models helps, but simple unweighted averaging treats missing graph history symmetrically and ignores detector precedence.
-  - **DualScope Supervised Fusion** (using sequence score, graph score, exponential temporal boost, and detector lead time) achieved **12 hits @ 38** and AP **0.119637**, doubling the performance of simple average fusion.
+| Alert Budget / Day | Total Alerts (4 Days) | GRU Alone (Hits & Recall) | Supervised Fusion (Hits & Recall) | Supervised Precision | Supervised Recall (of 136) |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **10 alerts/day** | 40 alerts | 0 / 40 (0.00%) | **6 / 40 (4.41%)** | **15.00%** | **4.41%** |
+| **25 alerts/day** | 100 alerts | 1 / 100 (0.74%) | **8 / 100 (5.88%)** | **8.00%** | **5.88%** |
+| **38 alerts/day** | 152 alerts | 4 / 152 (2.94%) | **10 / 152 (7.35%)** | **6.58%** | **7.35%** |
+| **50 alerts/day** | 200 alerts | 4 / 200 (2.94%) | **10 / 200 (7.35%)** | **5.00%** | **7.35%** |
+| **100 alerts/day** | 400 alerts | 8 / 400 (5.88%) | **17 / 400 (12.50%)** | **4.25%** | **12.50%** |
 
-### What Did the Non-ML Signature Baseline Achieve?
-- **Known-Attack Lookup produced 0 hits** in Day 09.
-- *Reason:* The non-ML ThreatHistory signature layer looks for exact recurrences of previously confirmed malicious triples `(acting_user, source_computer, destination_computer)`. On Day 09, the red-team attacker compromised user `U737@DOM1` and laterally moved to host `C529`, a destination computer never seen in earlier days.
-- *Significance:* This empirically highlights the signature blind spot: rule-based threat lookups are blind to novel attack targets, whereas DualScope's anomaly fusion detected the compromise despite the novel destination.
-
-### Why is Recall Capped at 46.34% at Budget 38?
-- Recall = (True Positives) / (Total Actual Positives).
-- On Day 09, there are **82 ground-truth attack user-hours**.
-- The budget restricts the model to at most **38 alerts**.
-- Even with 100% precision (38 hits / 38 alerts):
-  Max Possible Recall at Budget 38 = 38 / 82 = **46.34%**.
-- It is mathematically impossible to catch more than 38 attacks when an analyst is only assigned 38 alerts. In that context, DualScope's 12 hits (31.58% precision) quadrupled the single-timescale baseline.
+### Key Observations from Budget Curves:
+- **Low-Budget Dominance**: At 10 alerts/day (a constrained SOC shift), GRU alone catches 0 attacks, whereas Supervised Fusion catches 6 attacks with 15.00% precision.
+- **Sustained Superiority**: Across all tested budgets, DualScope Supervised Fusion catches between 2.1x and 8.0x more attacks than the single-timescale GRU baseline.
 
 ---
 
-## 4. Ablation Studies: Investigating Improvements
+## 4. Key Findings & Discussion
 
-We conducted two explicit ablation trials to investigate whether model modifications improve detection:
+### Did Fusion Outperform Single-Timescale Models on Unseen Days?
+- **Yes.** On out-of-sample Days 13–16, GRU alone caught 4 attacks (2.63% precision, 2.94% recall), and Graph GAE alone caught 1 attack.
+- DualScope Supervised Fusion caught **10 attacks (6.58% precision, 7.35% recall)**, representing a **2.5x increase in attack catch rate** over GRU alone and a **3.8x lift in PR-AUC** (0.017321 vs 0.004572).
+- Simple Average Fusion also outperformed the single models, catching 8 attacks (5.26% precision, 5.88% recall).
 
-### Ablation A: Adding Graph Structural Counters (Negative Trial)
-We tested adding Zachary's graph structural counters (`log(1 + new_edge_count)` and `degree_growth`) from Day 08 GAE snapshots into the Supervised Fusion model:
-- **Base 4 Features (`seq_score`, `graph_score`, `temporal_boost`, `log_lead_time`)**: Hits @ 38 = **12 / 38 (31.58%)**, AP = **0.119637**
-- **5 Features (+ `log(new_edge_count)`)**: Hits @ 38 = **4 / 38 (10.53%)**, AP = **0.068126**
-- **6 Features (+ `degree_growth`)**: Hits @ 38 = **1 / 38 (2.63%)**, AP = **0.019426**
-- **Finding:** Adding raw graph degree growth and edge counts severely degraded performance. In enterprise environments, IT administrative scripts regularly connect to dozens of new workstations, creating legitimate network fan-out. The classifier over-indexed on this administrative noise, pushing benign admins above stealthy credential compromises. Consequently, the **4-feature model remains the recommended default**.
+### Comparison with Teammate Baseline
+- A standard logistic regression tested strictly on Days 13–16 without temporal features caught 4/136 attacks (identical to GRU alone).
+- By incorporating multi-timescale temporal proximity (`temporal_boost`) and cross-detector lead time (`log_lead_time`), DualScope Supervised Fusion increased caught attacks from 4 to 10 out of the 136 ground-truth attacks.
 
-### Ablation D: Incident-Level Triage (Task 5.4 Advantage)
-Instead of forcing an analyst to review 38 isolated 1-hour fragments, the analyst reviews the **Top 38 Incident Envelopes** generated by Task 5.4 clustering:
-- **Malicious Incidents Caught**: **10 / 38 (26.32% incident precision)**
-- **Total Attack Hours Covered**: **30 / 82 hours (36.59% recall)**
-- **Distinct Attacker Accounts Caught**: **10 compromised accounts**: `U1450@DOM1`, `U1653@DOM1`, `U212@DOM1`, `U250@DOM1`, `U293@DOM1`, `U314@DOM1`, `U342@DOM1`, `U349@DOM1`, `U66@DOM1`, `U737@DOM1`
-- **Finding:** Triaging at the incident level increases attack hour coverage by **2.5x** (from 12 hours up to 30 hours) because single incidents envelope multi-hour sustained campaigns, maximizing forensic efficiency.
+### Why Maximum Fusion Failed
+- Maximum Fusion achieved 0 hits at budget 152 (AP 0.0031).
+- Taking the element-wise maximum combines the extreme false-positive tails of both detectors, allowing uncorroborated single-detector spikes to displace true attacks.
 
----
-
-## 5. Workload Reduction via Multi-Hour Incident Packaging (Task 5.4)
-
-In operational SOC environments, analysts cannot triage hundreds of disconnected user-hour alerts. Task 5.4 packages alerting hours under the same user within a 2-hour sliding window (`max_merge_gap_seconds = 7200`) into coherent incident envelopes.
-
-### Clustering Results for Day 09:
-- **Raw Fused Alerts at Calibrated Threshold (0.998188)**: 132 alerts/day
-- **Clustered Incident Envelopes**: 94 incidents/day
-- **Triage Workload Reduction**: **28.79% reduction in analyst volume**
-  - High-volume sustained attack campaigns spanning consecutive hours are compressed into single actionable envelopes.
-  - Each envelope maintains full provenance: start time, duration, detector consensus/disagreements, top graph evidence nodes, source references in `auth.txt`, and signature rule tags.
+### Non-ML Signature Baseline
+- Known-Attack Lookup produced 0 hits at the budget threshold because lateral movement on Days 13–16 involved newly compromised destination hosts that did not match frozen prior-day threat triples.
 
 ---
 
-## 5. Signature Layer & Priority Elevation (Task 5.4)
+## 5. Task 5.4 Incident-Level Triage & Workload Reduction
 
-The incident clustering engine incorporates a high-confidence signature rule layer:
-1. When an incident matches a confirmed malicious triple from analyst threat history, it is stamped with `is_rule_based_signature = True` and its rule matches are embedded in `rule_matches`.
-2. The incident triage priority is automatically elevated to `IncidentPriority.CRITICAL`.
-3. If no signature match is found, priority is assigned by calibrated detector score consensus (`CRITICAL` for concordant dual-detector alerts, `HIGH` for temporal co-occurrences, `MEDIUM`/`LOW` for single-detector investigations).
+In security operations, analysts review clustered multi-hour incident envelopes rather than isolated hourly alerts. 
+
+### Counting Methodology Fix
+To prevent inflated triage metrics:
+1. **Strict Temporal Overlap**: An incident envelope is counted as a hit if and only if an actual labelled red-team attack hour for that user falls within the incident window `[start_time, end_time)`. Merely being a compromised user on that calendar day is insufficient.
+2. **True Attack Hours Caught**: Only the actual ground-truth attack hours inside the incident are credited towards recall.
+3. **Explicit Analyst Workload**: Because multi-hour incidents require more review time than single-hour alerts, the total hours reviewed (`sum(duration_hours)`) is explicitly reported alongside incident counts.
+
+### Results on Test Days 13–16:
+- **Raw Fused Hourly Alerts**: 161 alerts across the 4 test days
+- **Clustered Incident Envelopes**: 74 incidents (**54.0% reduction in triage ticket volume**)
+- **Analyst Hours Reviewed**: 183 hours across all 74 incidents (average 2.47 hours per incident)
+- **Malicious Incidents Caught**: 4 / 74 (2.63% incident precision)
+- **Ground-Truth Attack Hours Caught**: 8 / 136 (5.88% recall of attack hours)
+- **Distinct Attacker Accounts Caught**: 3 accounts (`U1653@DOM1`, `U4448@DOM1`, `U66@DOM1`)
 
 ---
 
-## 6. Reproducibility & Commands
+## 6. Ablation Notes
 
-To regenerate this comparative evaluation matrix:
+### Feature Set Selection
+The production `SupervisedFusionModel` uses 4 multi-timescale features:
+1. `seq_score`: Short-term sequence anomaly score (1-hour window)
+2. `graph_score`: Long-term graph novelty score (24-hour window)
+3. `temporal_boost`: Exponentially decayed co-occurrence bonus (tau = 6h)
+4. `log_lead_time`: Log-scaled lead time between detector alerts
 
-```bash
-# 1. Run causal alignment, temporal fusion, and incident packaging with signature tagging
-.\.venv\Scripts\python scripts/align_and_fuse_scores.py \
-  --sequence-scores seq-gru-ae-v1-L32-h32/sequence_scores_seq_validation/outputs/sequence_scores/seq-gru-ae-v1/scores/dataset_day=09/part-000000.parquet \
-  --graph-scores "Long Term Graphs/scores/dataset_day=08/part-000000.parquet" \
-  --method temporal \
-  --alert-threshold 0.998188 \
-  --output outputs/day09_fused_temporal.parquet \
-  --incidents-output outputs/day09_incidents_temporal.jsonl \
-  --known-signatures data/processed/lanl_auth_days_01_30/redteam_labels/labels
+An exploratory test incorporating raw graph structural counters (`new_edge_count` and `degree_growth`) was evaluated on Day 09. These structural counters degraded ranking precision because routine IT administration scripts generate large legitimate network fan-out. Note that these tested counters were graph snapshot counters rather than Zachary's 5-minute burst counter. The 4-feature configuration remains the verified baseline.
 
-# 2. Compute Master Comparative Evaluation Matrix
-.\.venv\Scripts\python scripts/evaluate_comparison_matrix.py \
-  --fused-scores outputs/day09_fused_temporal.parquet \
-  --labels-dir data/processed/lanl_auth_days_01_30/redteam_labels/labels \
-  --incidents-file outputs/day09_incidents_temporal.jsonl \
-  --budget 38 \
+---
+
+## 7. Reproduction Command
+
+To reproduce the complete out-of-sample evaluation matrix, budget curves, and incident triage metrics:
+
+```powershell
+.\.venv\Scripts\python scripts/evaluate_comparison_matrix.py `
+  --seq-scores-dir seq-gru-ae-v1-L32-h32/sequence_scores_seq_validation/outputs/sequence_scores/seq-gru-ae-v1/scores `
+  --graph-scores-dir "Long Term Graphs/scores" `
+  --labels-dir data/processed/lanl_auth_days_01_30/redteam_labels/labels `
   --output-dir outputs/evaluation
 ```
