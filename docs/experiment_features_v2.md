@@ -2,7 +2,7 @@
 
 Owner: Member 1 (data prep), building on Member 2's sequence detector.
 Results: `outputs/experiment_v2/results.json` and `rules.json` (not in Git). Logs: `logs/experiment_v2/`.
-Branch: `experiment/features-v2`. Status: **done (2026-10-02)**. Result: **no clear improvement**; the success rule was not met (see results log). Follow-up Option A (supervised fusion): **success rule met** by gradient boosting (16 vs 4 attacks at 38 alerts/day on days 13–16); see its section below.
+Branch: `experiment/features-v2`. Status: **done (2026-10-02)**. Result: **no clear improvement**; the success rule was not met (see results log). Follow-up Option A (supervised fusion): **success rule met** by gradient boosting (16 vs 4 attacks at 38 alerts/day on days 13–16); see its section below. Final test on days 17–30 (2026-10-06): **primary rule not met** (1 of 39 attacks at 38/day vs the GRU's 0; AP 0.00124 vs 0.00020); see "Final test results".
 
 ## In plain words
 
@@ -230,6 +230,40 @@ Checks (for interpretation only; they don't change the verdict):
 **Test success rules (fixed):**
 1. Primary: the frozen model catches **≥ 2× the GRU's TP at 38/day** (at least 2 if the GRU catches 0) **and** has **higher AP** than the GRU on days 17–30.
 2. Secondary: the frozen model catches **more TP at 38/day and has higher AP** than the GRU restricted to human accounts. This shows whether the model adds anything beyond a machine-account filter.
+
+### Final test results (2026-10-06, run once by Member 1)
+
+**Rebuild and refreeze.** Run on this laptop after all, with the steps of the handover writing to separate folders so the Option A files stay untouched. Logs: `logs/final_test/`, results: `outputs/final_test/`.
+
+| Step | Command (deviations from the handover) | Result |
+| --- | --- | --- |
+| Features, days 1–30 | `build_lanl_features.py --workers 2 --assembly-workers 2 --low-memory-read` → `data/processed/lanl_features_v2_days_01_30` | 508,854,306 events, reconciled; 2 h 58 min (pass 1 1 h 53 min, pass 2 1 h 5 min). Preprocessing differs from the days 1–16 build only in 13 floating-point values (max relative difference 2.2 × 10⁻¹⁵, from merging 2 instead of 12 shards) and in the row counts that now include test days |
+| GRU run A | `--runs-dir models/sequence/runs_final_test --cache-dir data/processed/sequence_cache_final_test` | Same loss at every epoch as the original run A to 5 decimals (final 0.22433 / 0.22507) |
+| Validation scoring | CPU (the GPU was not available to PyTorch), `--units-output outputs/final_test/units_A.parquet` | **Reproduces** AP 0.00598, 8 / 220 and every other row of the original table |
+| Fusion check | `--counts-cache outputs/final_test/fusion_counts.parquet` (a new cache, so counts come from the new build) | Hourly counts identical to Option A. GRU scores differ slightly (median relative difference 0.02%, rank correlation 0.9999998; original scored on GPU, these on CPU). Gradient boosting: **13 / 136**, AP 0.0348 (Option A: 16, 0.0498). Still meets the success rule |
+| Freeze | `--gru-run models/sequence/runs_final_test/A --output models/fusion/final_test/frozen` | Same settings, days 8–16, 45 iterations, model sha256 `02b4e6f7e3d1…`. Nothing changed after this point |
+
+**Stability check (validation only, before the test).** Because a 0.02% change in the GRU scores moved gradient boosting from 16 to 13, `scripts/experiment_v2_stability.py` refitted both models on days 8–12 ten times with the GRU scores multiplied by (1 + e), e ~ Normal(0, 3 × 10⁻⁴) (the observed size of the change), and scored days 13–16 (`outputs/final_test/stability.json`). Gradient boosting: **median 16 / 136, range 13–18; AP median 0.042, range 0.035–0.051**. Logistic regression: 4 / 136 in every run. Every run meets the success rule. The validation result to report is therefore "16 of 136 (13–18 under numeric noise)", 3–4.5× the GRU's 4.
+
+**Test (days 17–30).** Day-16 reproduction check: 431,200 user-hours, max GRU score difference 0, counts equal. 5,537,311 test user-hours, all with events scored. **39 positive user-hours**, all scored, from 34 positive user-days; 28 of the 39 are on days 27 (20) and 28 (8).
+
+| Scorer | AP | ROC-AUC | TP at 38/day | Alerts machine / human | User-day AP | User-day TP at 38/day |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| **Frozen gradient boosting** | **0.00124** | **0.969** | **1 / 39** | 0 / 532 | 0.00368 | 1 / 34 |
+| GRU, run A (`max_event`) | 0.00020 | 0.846 | 0 / 39 | 303 / 229 | 0.00096 | 1 / 34 |
+| Count either flag | 0.00006 | 0.598 | 0 / 39 | 343 / 189 | 0.00061 | 0 / 34 |
+| GRU, human accounts only | 0.00043 | 0.944 | 0 / 39 | 0 / 532 | 0.00236 | 1 / 34 |
+| Either flag, human accounts only | 0.00010 | 0.811 | 0 / 39 | 0 / 532 | 0.00155 | 2 / 34 |
+
+The model's one hit is on day 28.
+
+**Rules:**
+1. Primary: **not met.** The GRU caught 0, so the model needed at least 2. It caught 1 (its AP is about 6× the GRU's).
+2. Secondary: **met** (1 > 0 TP, AP 0.00124 > 0.00043).
+
+**Where the attacks rank (descriptive, after the test; nothing was changed).** Median daily rank of the 39 attack hours: frozen model 1,958, GRU 19,917 (of about 325,000–453,000 user-hours per day). Attack hours within each day's top 100 / 500 / 1,000: frozen model 2 / 7 / 14, GRU 0 / 3 / 3.
+
+**Reading.** On unseen test days the supervised fusion still ranks attacks far better than the GRU (AP about 6×, ROC-AUC 0.969 vs 0.846; the typical attack hour about 10× higher in the ranking), but at 38 alerts per day it catches almost nothing: 1 of 39. The validation gain at the budget (16 of 136 vs 4) does not carry over to days 17–30. With 39 positives concentrated on two days, the test is also small: one hit more or less changes the verdict. For the report: the model is a better ranker than the GRU, but not an effective detector at this alert budget on this test period.
 
 ## Out of scope (for now)
 

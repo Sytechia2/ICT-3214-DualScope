@@ -26,9 +26,11 @@ Caveats for the report:
 
 ## What's left: the one-time test on days 17–30
 
+> **Done (2026-10-06, Member 1). Do not run step 6 again.** Result: the frozen model caught 1 of 39 test attack hours at 38 alerts/day (GRU 0); AP 0.00124 vs 0.00020. Primary rule not met, secondary rule met. Details: "Final test results" in [experiment_features_v2.md](experiment_features_v2.md). The steps below are kept as the record of how it was run.
+
 Everything below is on branch `experiment/features-v2` (not merged into `main`). Our trained models aren't in Git, so you rebuild them; the settings are fixed and the steps are deterministic, so your numbers should match ours (checkpoints below). Use the project's `.venv` (Python 3.12 or 3.13).
 
-**Memory warning:** the feature build with `--workers 12` needs about 58 GB of memory. On a 32 GB machine use `--workers 4` (roughly 20 GB, our estimate; slower) and don't use the PC for heavy work while it runs. Any worker count is fine because you rebuild everything from the same build.
+**Memory (measured):** each pass-1 worker uses about 5 GB plus about 3 GB for the host-connection task, and each pass-2 assembly worker up to 11–12 GB. On a 32 GB machine use `--workers 2 --assembly-workers 1 --low-memory-read` with other apps closed (the actual run used `--assembly-workers 2` and went into the page file; it took about 3 h). Any worker count gives the same result because everything is rebuilt from the same build.
 
 ```powershell
 git fetch origin

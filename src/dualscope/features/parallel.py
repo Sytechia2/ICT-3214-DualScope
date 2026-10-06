@@ -67,12 +67,20 @@ def user_shards(users: pa.Array | pa.ChunkedArray, n_shards: int) -> np.ndarray:
     return shard_of_value[encoded.indices.to_numpy(zero_copy_only=False)]
 
 
-def _scanner(events_dir: str, max_day: int | None, batch_size: int, columns: list[str]) -> ds.Scanner:
+# Read-ahead limits for --low-memory-read: one input file and two batches ahead
+# instead of PyArrow's defaults (4 files, 16 batches). Same rows, same order.
+LOW_MEMORY_READ_AHEAD = {"fragment_readahead": 1, "batch_readahead": 2}
+
+
+def _scanner(
+    events_dir: str, max_day: int | None, batch_size: int, columns: list[str], low_memory_read: bool = False,
+) -> ds.Scanner:
     dataset = ds.dataset(events_dir, format="parquet", partitioning="hive")
     filter_expr = ds.field("timestamp") >= 1
     if max_day is not None:
         filter_expr = filter_expr & (ds.field("dataset_day") <= max_day)
-    return dataset.scanner(filter=filter_expr, batch_size=batch_size, columns=columns)
+    read_ahead = LOW_MEMORY_READ_AHEAD if low_memory_read else {}
+    return dataset.scanner(filter=filter_expr, batch_size=batch_size, columns=columns, **read_ahead)
 
 
 class _DayWriter:
@@ -139,7 +147,9 @@ def _pass1_shard(task: dict[str, Any]) -> dict[str, Any]:
     writer = _DayWriter(Path(task["shard_dir"]), RAW_FEATURE_SCHEMA)
     events = 0
     try:
-        for batch in _scanner(task["events_dir"], task["max_day"], task["batch_size"], list(INPUT_COLUMNS)).to_batches():
+        for batch in _scanner(
+            task["events_dir"], task["max_day"], task["batch_size"], list(INPUT_COLUMNS), task.get("low_memory_read", False),
+        ).to_batches():
             if len(batch) == 0:
                 continue
             mine = user_shards(batch["acting_user"], task["n_shards"]) == task["shard"]
@@ -180,7 +190,9 @@ def _host_connection_novelty(task: dict[str, Any]) -> dict[str, Any]:
     columns = ["timestamp", "source_line", "source_computer", "destination_computer", "dataset_day"]
     writer = _DayWriter(out_dir, pa.schema([("source_line", pa.int64()), ("is_new_host_connection", pa.bool_()), ("dataset_day", pa.int32())]))
     try:
-        for batch in _scanner(task["events_dir"], task["max_day"], task["batch_size"], columns).to_batches():
+        for batch in _scanner(
+            task["events_dir"], task["max_day"], task["batch_size"], columns, task.get("low_memory_read", False),
+        ).to_batches():
             if len(batch) == 0:
                 continue
             ts = batch["timestamp"].to_numpy()
@@ -283,6 +295,7 @@ def build_features_parallel(
     max_day: int | None = None,
     batch_size: int = 200_000,
     assembly_workers: int = 8,
+    low_memory_read: bool = False,
     mode: str = "production",
     is_production: bool = True,
     log=print,
@@ -296,6 +309,7 @@ def build_features_parallel(
     common = {
         "events_dir": str(events_dir), "max_day": max_day, "batch_size": batch_size,
         "feature_config": str(feature_config_path), "splits_config": str(splits_config_path),
+        "low_memory_read": low_memory_read,
     }
     context = multiprocessing.get_context("spawn")
 
@@ -352,6 +366,7 @@ def build_features_parallel(
         "parallel": {
             "workers": workers,
             "assembly_workers": assembly_workers,
+            "low_memory_read": low_memory_read,
             "shard_events": [r["events"] for r in sorted(shard_results, key=lambda r: r["shard"])],
             "shard_seconds": [r["seconds"] for r in sorted(shard_results, key=lambda r: r["shard"])],
             "host_connection_pass": host_result,

@@ -171,6 +171,12 @@ def parse_args() -> argparse.Namespace:
         help="Days assembled and transformed concurrently in a parallel build.",
     )
     parser.add_argument(
+        "--low-memory-read",
+        action="store_true",
+        help="Parallel build: read one input file and two batches ahead instead of PyArrow's defaults, "
+             "to bound memory per process. Output is unchanged.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Overwrite existing output directory if it exists.",
@@ -280,6 +286,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
             max_day=args.pilot_days,
             batch_size=args.batch_size,
             assembly_workers=getattr(args, "assembly_workers", 8),
+            low_memory_read=getattr(args, "low_memory_read", False),
             mode="pilot" if args.pilot_mode else "production",
             is_production=not args.pilot_mode,
         )

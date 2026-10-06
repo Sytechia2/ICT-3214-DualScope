@@ -25,7 +25,7 @@ def _build_script():
     return module
 
 
-def _args(events: Path, output: Path, workers: int) -> argparse.Namespace:
+def _args(events: Path, output: Path, workers: int, low_memory_read: bool = False) -> argparse.Namespace:
     return argparse.Namespace(
         events=events,
         splits_config=REPO_ROOT / "data/fixtures/fixture_splits.json",
@@ -41,6 +41,7 @@ def _args(events: Path, output: Path, workers: int) -> argparse.Namespace:
         transform_only=False,
         workers=workers,
         assembly_workers=2,
+        low_memory_read=low_memory_read,
         overwrite=False,
     )
 
@@ -94,3 +95,17 @@ def test_parallel_build_matches_sequential(synthetic_sequences, tmp_path) -> Non
         for field in ("mean", "std", "scale"):
             assert par_pre["numeric_stats"][name][field] == pytest.approx(stat[field], rel=1e-9, abs=1e-12)
     assert not (tmp_path / "parallel" / "_parallel_work").exists()
+
+
+def test_low_memory_read_gives_identical_output(synthetic_sequences, tmp_path) -> None:
+    script = _build_script()
+    events = synthetic_sequences.auth_root / "events"
+    default = script.run_pipeline(_args(events, tmp_path / "default", workers=2))
+    low = script.run_pipeline(_args(events, tmp_path / "low", workers=2, low_memory_read=True))
+
+    assert default["counts"]["raw_events_written"] == low["counts"]["raw_events_written"] > 0
+    for kind in ("raw", "transformed"):
+        assert _sorted_table(tmp_path / "low" / kind / "events").equals(_sorted_table(tmp_path / "default" / kind / "events"))
+    assert (tmp_path / "low" / "preprocessing.json").read_text(encoding="utf-8") == (
+        tmp_path / "default" / "preprocessing.json"
+    ).read_text(encoding="utf-8")
