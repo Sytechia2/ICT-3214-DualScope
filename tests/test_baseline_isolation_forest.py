@@ -8,6 +8,7 @@ from dualscope.baseline.features import (
     BASELINE_FEATURE_NAMES,
     UserHourUnit,
     aggregate_events_to_user_hours,
+    aggregate_user_hours_table,
     build_user_hour_feature_matrix,
 )
 from dualscope.baseline.isolation_forest import (
@@ -182,3 +183,48 @@ def test_synthetic_demo_units_and_calibrator_persistence(tmp_path):
         assert r1.score == pytest.approx(r2.score)
         assert r1.is_alert == r2.is_alert
 
+
+
+def _random_events_table(n: int = 2_000, seed: int = 0) -> pa.Table:
+    rng = np.random.default_rng(seed)
+    ts = np.sort(rng.integers(1, 4 * 3600, n))
+    return pa.Table.from_pydict(
+        {
+            "timestamp": ts,
+            "acting_user": rng.choice(["U1@DOM1", "U2@DOM1", "C3$@DOM1", "U4@C5"], n).tolist(),
+            "source_line": np.arange(n),
+            "log1p_prior_auth_count_1h_scaled": rng.normal(size=n).astype(np.float32),
+            "log1p_prior_failure_count_1h_scaled": rng.normal(size=n).astype(np.float32),
+            "log1p_seconds_since_previous_auth_scaled": rng.normal(size=n).astype(np.float32),
+            "log1p_prior_unique_destinations_24h_scaled": rng.normal(size=n).astype(np.float32),
+            "log1p_prior_user_destination_count_24h_scaled": rng.normal(size=n).astype(np.float32),
+            "has_user_history": rng.integers(0, 2, n).astype(np.float32),
+            "is_new_user_destination": rng.integers(0, 2, n).astype(np.float32),
+            "is_new_host_connection": rng.integers(0, 2, n).astype(np.float32),
+            # Few categories, so the mode often has ties.
+            "auth_type_id": rng.integers(2, 4, n).astype(np.int32),
+            "logon_type_id": rng.integers(2, 5, n).astype(np.int32),
+            "auth_orientation_id": rng.integers(2, 4, n).astype(np.int32),
+            "auth_result_id": rng.choice([2, 3], n, p=[0.1, 0.9]).astype(np.int32),
+        }
+    )
+
+
+def test_vectorised_aggregation_matches_per_unit_aggregation():
+    events = _random_events_table()
+    units = aggregate_events_to_user_hours(events, hour_seconds=3600)
+    keys, matrix = aggregate_user_hours_table(events, hour_seconds=3600)
+
+    assert [(u.user_id, u.window_start) for u in units] == list(zip(keys["user_id"], keys["window_start"]))
+    np.testing.assert_allclose(matrix, build_user_hour_feature_matrix(units), rtol=1e-6, atol=1e-6)
+
+
+def test_failure_rate_counts_the_fail_id_only():
+    events = _random_events_table(n=500, seed=1)
+    keys, matrix = aggregate_user_hours_table(events, hour_seconds=3600, fail_id=2)
+    rate = matrix[:, BASELINE_FEATURE_NAMES.index("failure_rate_1h")]
+    frame = events.to_pandas()
+    frame["window_start"] = 1 + ((frame["timestamp"] - 1) // 3600) * 3600
+    expected = frame.assign(f=frame["auth_result_id"] == 2).groupby(["acting_user", "window_start"])["f"].mean()
+    np.testing.assert_allclose(rate, expected.to_numpy(), rtol=1e-6)
+    assert 0.0 < rate.mean() < 0.5  # not the old constant 1.0

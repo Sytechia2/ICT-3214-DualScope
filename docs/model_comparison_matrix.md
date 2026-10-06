@@ -24,6 +24,7 @@
 | Temporal fusion | 8 | 5.26% | 5.88% | 0.014148 | 0.0711 | Average fusion + co-alert boost (τ = 6 h, boost 0.15) |
 | Supervised fusion: logistic regression | 10 | 6.58% | 7.35% | 0.016695 | 0.0733 | seq + graph + temporal boost + lead time |
 | Known-attack lookup | 0 | 0.00% | 0.00% | 0.004253 | 0.0240 | Non-ML: users in confirmed history before Day 13 |
+| Isolation Forest | 0 | 0.00% | 0.00% | 0.000341 | 0.0024 | Baseline: 16 flat hourly features, fitted on Days 2–7 without labels |
 | **DualScope final: gradient boosting** | **16** | **10.53%** | **11.76%** | **0.049843** | **0.1333** | **GRU score + hourly authentication counts** |
 
 The final model is the HistGradientBoosting supervised fusion ([supervised_fusion.md](supervised_fusion.md)), fitted on Days 08–12 with its settings fixed in advance. Its inputs are the GRU score and per-hour counts (events, failures, distinct sources and destinations, first-time user→source, host→host and user→destination connections, NTLM, Network logon type, LogOn) plus a machine-account flag. Its scores are exported with the model's own code (`scripts/supervised_fusion_validate.py`) and passed in with `--final-model-scores`. Ties are broken by that experiment's fixed random order (seed 0), so the row matches its recorded result (16/136, AP 0.04984).
@@ -34,15 +35,15 @@ The final model is the HistGradientBoosting supervised fusion ([supervised_fusio
 
 Hits / precision / recall (of 136) at each daily budget:
 
-| Alerts/day | Total | GRU alone | Logistic regression fusion | Final: gradient boosting |
-| :--- | :---: | :---: | :---: | :---: |
-| 10 | 40 | 0 / 0.00% / 0.00% | **6 / 15.00% / 4.41%** | 5 / 12.50% / 3.68% |
-| 25 | 100 | 1 / 1.00% / 0.74% | 9 / 9.00% / 6.62% | **14 / 14.00% / 10.29%** |
-| 38 | 152 | 4 / 2.63% / 2.94% | 10 / 6.58% / 7.35% | **16 / 10.53% / 11.76%** |
-| 50 | 200 | 4 / 2.00% / 2.94% | 10 / 5.00% / 7.35% | **16 / 8.00% / 11.76%** |
-| 100 | 400 | 8 / 2.00% / 5.88% | 18 / 4.50% / 13.24% | **25 / 6.25% / 18.38%** |
+| Alerts/day | Total | GRU alone | Isolation Forest | Logistic regression fusion | Final: gradient boosting |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| 10 | 40 | 0 / 0.00% / 0.00% | 0 / 0.00% / 0.00% | **6 / 15.00% / 4.41%** | 5 / 12.50% / 3.68% |
+| 25 | 100 | 1 / 1.00% / 0.74% | 0 / 0.00% / 0.00% | 9 / 9.00% / 6.62% | **14 / 14.00% / 10.29%** |
+| 38 | 152 | 4 / 2.63% / 2.94% | 0 / 0.00% / 0.00% | 10 / 6.58% / 7.35% | **16 / 10.53% / 11.76%** |
+| 50 | 200 | 4 / 2.00% / 2.94% | 0 / 0.00% / 0.00% | 10 / 5.00% / 7.35% | **16 / 8.00% / 11.76%** |
+| 100 | 400 | 8 / 2.00% / 5.88% | 0 / 0.00% / 0.00% | 18 / 4.50% / 13.24% | **25 / 6.25% / 18.38%** |
 
-- Both supervised fusions beat the GRU at every budget.
+- Both supervised fusions beat the GRU at every budget. The Isolation Forest baseline catches nothing at any budget up to 100 alerts/day.
 - The gradient boosting model catches the most attacks from 25 alerts/day upward. At 10 alerts/day the logistic regression fusion is one hit ahead (6 vs 5); a one-hit difference is within chance at these counts.
 
 ---
@@ -60,6 +61,9 @@ Fitted coefficients (raw inputs): seq_score 6.75, graph_score 1.78, temporal_boo
 
 ### Why maximum fusion failed
 Taking the maximum keeps the highest false-positive scores of both detectors, so uncorroborated single-detector spikes fill the budget.
+
+### Isolation Forest baseline
+The flat-feature baseline (Task 9.2) summarises each user-hour in 16 numbers (event count, means and maxima of the shared historical features, first-time connection rates, failure rate, most common authentication, logon and orientation type) and is fitted on 100,000 sampled training user-hours from Days 2–7, without labels. On Days 13–16 its AP (0.00034) is about 4× the attack rate but 13× lower than the GRU's, and none of its top 38 hours per day is an attack. A per-hour summary of normal-looking features does not separate the red-team hours, which are a few NTLM logons inside otherwise ordinary activity. Scored once on the test days 17–30 (scores saved before labels were read), it also catches 0 of 39 (AP 0.00002, ROC-AUC 0.675).
 
 ### Known-attack lookup
 This baseline gives the same score to every hour of a user who appears in the confirmed history before Day 13, so it cannot rank among those hours, and its top 38 per day contained no attack hours.
@@ -105,12 +109,19 @@ An earlier test that added graph structural counters (`new_edge_count`, `degree_
 .\.venv\Scripts\python scripts/export_final_model_scores.py
 ```
 
-2. Run the matrix (detector score paths are the defaults: `outputs/sequence_scores/seq-gru-ae-v1-L32-h32-91e4b11d34/scores` from Member 2's validation package and `outputs/graph_scores_v1/scores` from the graph package):
+2. Train the Isolation Forest baseline and score Days 8–16 (about 5 minutes; needs the Days 1–30 feature build `data/processed/lanl_features_v2_days_01_30`):
+
+```powershell
+.\.venv\Scripts\python scripts/train_baseline_isolation_forest.py
+```
+
+3. Run the matrix (detector score paths are the defaults: `outputs/sequence_scores/seq-gru-ae-v1-L32-h32-91e4b11d34/scores` from Member 2's validation package and `outputs/graph_scores_v1/scores` from the graph package):
 
 ```powershell
 .\.venv\Scripts\python scripts/evaluate_comparison_matrix.py `
   --final-model-scores outputs/experiment_v2/final_model_scores_days13_16.parquet `
+  --baseline-scores outputs/baseline_scores/val_baseline.parquet `
   --output-dir outputs/evaluation
 ```
 
-Without `--final-model-scores` the final model's row is omitted.
+Without `--final-model-scores` or `--baseline-scores` the corresponding row is omitted.

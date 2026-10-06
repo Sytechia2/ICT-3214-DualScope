@@ -10,6 +10,7 @@ import pytest
 from scripts.evaluate_comparison_matrix import (
     add_temporal_features,
     evaluate_incident_triage,
+    load_baseline_scores,
     load_final_model_scores,
     top_k,
 )
@@ -98,3 +99,15 @@ def test_final_model_scores_must_cover_every_test_unit(tmp_path) -> None:
     load_final_model_scores(path, [d])
     assert d["final_scores"].tolist() == [0.1, 0.2, 0.3, 0.4]
     assert d["final_tie_order"].tolist() == [3, 2, 1, 0]
+
+
+def test_baseline_scores_must_cover_every_test_unit(tmp_path) -> None:
+    d = _day()
+    path = tmp_path / "baseline.parquet"
+    pq.write_table(pa.table({"user_id": d["users"][1:], "window_start": d["windows"][1:], "score": [0.2, 0.3, 0.4]}), path)
+    with pytest.raises(SystemExit, match="missing for 1"):
+        load_baseline_scores(path, [d])
+
+    pq.write_table(pa.table({"user_id": d["users"][::-1], "window_start": d["windows"][::-1], "score": [0.4, 0.3, 0.2, 0.1]}), path)
+    load_baseline_scores(path, [d])
+    assert d["baseline_scores"].tolist() == [0.1, 0.2, 0.3, 0.4]
