@@ -8,7 +8,7 @@ This checklist captures the detailed-guide Task 1.1 decision. It should be revie
 - [ ] A reproducible LANL subset is selected and documented.
 - [ ] Chronological training, validation and test periods are defined.
 - [ ] A short-term sequence detector is trained and evaluated.
-- [ ] A long-term authentication-graph detector is trained and evaluated.
+- [x] A long-term authentication-graph detector is trained and evaluated, including imbalanced metrics and a chronological overfitting check.
 - [ ] A flat-feature Isolation Forest baseline is included.
 - [ ] Maximum, average, weighted and temporal fusion are compared.
 - [ ] Incidents retain detector score breakdowns and source evidence references.

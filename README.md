@@ -11,6 +11,10 @@ This repository is being built from the shared workplans in:
 
 ## Current status
 
+Tasks 4.1–4.4, the long-term graph detector, are implemented: causal rolling bipartite snapshots, a feature-based graph convolutional autoencoder, validation-only calibration/thresholding, and common-schema user score/evidence export. See [the graph detector guide](docs/graph_detector.md) and [downstream handoff](docs/graph_detector_handoff.md). Production training and evaluation artifacts are local/ignored and must be generated with the provided scripts.
+
+The long-term detector exports two separate relationship signals in one artifact: counter-enhanced unsupervised GAE novelty and high-confidence confirmed-relationship recurrence. The GAE reaches test F1 `0.0769`; confirmed recurrence reaches precision `0.8286`, recall `0.8529`, and F1 `0.8406` on a retrospective Days 17–30 backtest. The latter is a supervised recurrence signature, not the autoencoder result, and requires a fresh holdout before it is treated as an unbiased final estimate. A raw union is available for analyst review but has F1 `0.2308`, so it is not used to claim the 84.06% result. See the [graph evaluation report](docs/graph_model_evaluation.md), [downstream handoff](docs/graph_detector_handoff.md), and [overfitting-check guide](docs/graph_overfitting.md).
+
 Tasks 3.1–3.4, the short-term sequence detector, are implemented and frozen:
 
 - **3.1 Sequences:** 11,846,723 acting-user/hour sequences, with zero boundary violations and Day 1 marked as warm-up.
@@ -22,7 +26,7 @@ The selected model (`seq-gru-ae-v1-L32-h32-91e4b11d34`) reaches validation avera
 
 The detector was fitted on a production run of the Task 2.4 pipeline (all 508,854,306 events reconciled). Checkpoints and full scores are shared outside Git. See [the sequence detector guide](docs/sequence_detector.md), [the downstream handoff](docs/sequence_detector_handoff.md), and the [sequence](data/manifests/lanl_sequences_v1.json) and [selection](data/manifests/sequence_detector_v1.json) manifests.
 
-Task 2.4 shared historical features are implemented. The streaming two-pass pipeline preserves `source_reference` in raw and transformed feature rows. A documented representative pilot processed and reconciled 15.8 million real authentication events; the full 30-day feature output is a separate run and has not been produced. See [the feature guide](docs/lanl_features.md) and [its manifest](data/manifests/lanl_features_v1.json).
+Task 2.4 shared historical features are implemented. The streaming two-pass pipeline preserves `source_reference` in raw and transformed feature rows. The completed local production run processed and reconciled all 508,854,306 events across Days 1–30. Large generated feature, model, and score artifacts remain outside Git. See [the feature guide](docs/lanl_features.md) and [its manifest](data/manifests/lanl_features_v1.json).
 
 Task 2.5 evidence lookup and provenance helpers are implemented. `AuthenticationEvidenceLookup` resolves accepted `auth.txt:<source_line>` references to normalized events and their retained raw record; carrier helpers attach ordered references to sequence and graph evidence and support paging. The checked-in sample demonstrates end-to-end tracing, but it is synthetic sample data rather than a real detector incident. See [the evidence guide](docs/evidence_references.md).
 
