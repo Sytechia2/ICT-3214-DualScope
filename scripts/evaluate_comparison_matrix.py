@@ -17,8 +17,14 @@ Models compared:
   3. Simple Baseline: Maximum Fusion
   4. Simple Baseline: Average Fusion (50/50)
   5. DualScope Temporal Fusion (calibrated tau=6h, boost=0.15)
-  6. DualScope Supervised Fusion (seq + graph + temporal boost + lead time)
+  6. Supervised Fusion, logistic regression (seq + graph + temporal boost + lead time)
   7. Known-Attack Lookup (Non-ML ThreatHistory recurrence baseline)
+  8. DualScope final model, gradient boosting (GRU + hourly counts), when
+     ``--final-model-scores`` is given
+
+Every threshold that uses labels (detector alert cut-offs, temporal fusion alert
+threshold) is fitted on Days 08-12 by best F1. Test-day labels are used only to
+score the results.
 """
 
 from __future__ import annotations
@@ -46,6 +52,9 @@ from dualscope.fusion.supervised import SupervisedFusionModel
 from dualscope.fusion.temporal import TemporalFusedScoreRow
 from dualscope.graph.threat_history import ThreatHistory
 
+LR_NAME = "Supervised Fusion: LogReg (seq+graph+temporal)"
+FINAL_NAME = "DualScope Final: GradBoost (GRU+hourly counts)"
+
 
 def load_redteam_labels(labels_path: Path) -> tuple[set[tuple[str, int]], list[dict[str, Any]]]:
     """Load ground-truth red team labels as user-hour tuples."""
@@ -64,10 +73,13 @@ def load_day_scoring_units(
     seq_root: Path,
     graph_root: Path,
     redteam_hours: set[tuple[str, int]],
-    temporal_decay: float = 21600.0,
-    temporal_boost_weight: float = 0.15,
 ) -> dict[str, Any]:
-    """Load and causally align sequence and graph scores for one dataset day."""
+    """Load and causally align sequence and graph scores for one dataset day.
+
+    The exported ``is_alert`` flags are kept only for reference: their thresholds
+    were chosen on all validation days 8-16, so the temporal features are built
+    later by ``add_temporal_features`` from cut-offs fitted on the training days.
+    """
     seq_path = seq_root / f"dataset_day={day:02d}"
     seq_files = list(seq_path.glob("*.parquet"))
     if not seq_files:
@@ -97,24 +109,6 @@ def load_day_scoring_units(
     graph_scores = np.array([graph_map.get(u, 0.0) for u in users], dtype=np.float64)
     graph_alerts = np.array([graph_alert_map.get(u, False) for u in users], dtype=bool)
 
-    # Base simple average fusion
-    base_fused = 0.5 * seq_scores + 0.5 * graph_scores
-
-    # Temporal co-occurrence boost and lead time
-    day_start = (day - 1) * 86400 + 1
-    boosts = np.zeros(len(users), dtype=np.float64)
-    lead_times = np.zeros(len(users), dtype=np.float64)
-
-    for i in range(len(users)):
-        if graph_alerts[i] and seq_alerts[i]:
-            delta_t = max(0, int(windows[i]) - day_start)
-            boost = temporal_boost_weight * np.exp(-delta_t / temporal_decay)
-            boosts[i] = boost
-            lead_times[i] = delta_t
-
-    temp_scores = np.clip(base_fused + boosts, 0.0, 1.0)
-    log_lead_time = np.log1p(lead_times)
-
     y_true = np.array([(u, w) in redteam_hours for u, w in zip(users, windows)], dtype=bool)
 
     return {
@@ -122,15 +116,73 @@ def load_day_scoring_units(
         "users": users,
         "windows": windows,
         "seq_scores": seq_scores,
-        "seq_alerts": seq_alerts,
+        "exported_seq_alerts": seq_alerts,
         "graph_scores": graph_scores,
-        "graph_alerts": graph_alerts,
-        "base_fused": base_fused,
-        "temporal_boost": boosts,
-        "temp_scores": temp_scores,
-        "log_lead_time": log_lead_time,
+        "exported_graph_alerts": graph_alerts,
+        "base_fused": 0.5 * seq_scores + 0.5 * graph_scores,
         "y": y_true,
     }
+
+
+def add_temporal_features(
+    d: dict[str, Any],
+    seq_cutoff: float,
+    graph_cutoff: float,
+    temporal_decay: float = 21600.0,
+    temporal_boost_weight: float = 0.15,
+) -> None:
+    """Add detector alerts, temporal boost and lead time to one loaded day.
+
+    ``lead_time`` is the time from the start of the day (when the previous day's
+    graph score becomes available) to the start of the co-alerting hour. It is
+    non-zero only when both detectors alert.
+    """
+    seq_alerts = d["seq_scores"] >= seq_cutoff
+    graph_alerts = d["graph_scores"] >= graph_cutoff
+    both = seq_alerts & graph_alerts
+    day_start = (d["day"] - 1) * 86400 + 1
+    delta_t = np.maximum(0, d["windows"].astype(np.int64) - day_start)
+    lead_times = np.where(both, delta_t, 0).astype(np.float64)
+    boosts = np.where(both, temporal_boost_weight * np.exp(-delta_t / temporal_decay), 0.0)
+
+    d["seq_alerts"] = seq_alerts
+    d["graph_alerts"] = graph_alerts
+    d["temporal_boost"] = boosts
+    d["lead_time_seconds"] = lead_times
+    d["log_lead_time"] = np.log1p(lead_times)
+    d["temp_scores"] = np.clip(d["base_fused"] + boosts, 0.0, 1.0)
+
+
+def load_final_model_scores(path: Path, test_days: list[dict[str, Any]]) -> None:
+    """Attach the final model's per-hour scores and tie order to each test day.
+
+    The file holds one row per test user-hour (``user_id``, ``window_start``,
+    ``score``, ``tie_order``). Every test unit must have a score.
+    """
+    table = pq.read_table(str(path), columns=["user_id", "window_start", "score", "tie_order"])
+    by_unit = {
+        (u, int(w)): (float(s), int(t))
+        for u, w, s, t in zip(
+            table["user_id"].to_pylist(),
+            table["window_start"].to_numpy(),
+            table["score"].to_numpy(),
+            table["tie_order"].to_numpy(),
+        )
+    }
+    for d in test_days:
+        pairs = [by_unit.get((u, int(w))) for u, w in zip(d["users"], d["windows"])]
+        missing = sum(p is None for p in pairs)
+        if missing:
+            raise SystemExit(f"final model scores missing for {missing:,} day-{d['day']} units in {path}")
+        d["final_scores"] = np.array([p[0] for p in pairs], dtype=np.float64)
+        d["final_tie_order"] = np.array([p[1] for p in pairs], dtype=np.int64)
+
+
+def top_k(scores: np.ndarray, k: int, tie_order: np.ndarray | None = None) -> np.ndarray:
+    """Indices of the ``k`` highest scores; ties by ``tie_order``, else file order."""
+    if tie_order is None:
+        return np.argsort(-scores, kind="stable")[:k]
+    return np.lexsort((tie_order, -scores))[:k]
 
 
 def compute_best_f1(y_true: np.ndarray, scores: np.ndarray) -> tuple[float, float]:
@@ -187,7 +239,7 @@ def evaluate_incident_triage(
         (inc["user_id"] if isinstance(inc, dict) else inc.user_id) for inc in hit_incidents
     }
     num_hits = len(hit_incidents)
-    prec = num_hits / budget * 100 if budget > 0 else 0.0
+    prec = num_hits / len(top_incidents) * 100 if top_incidents else 0.0
     rec = len(attack_hours_caught) / total_attacks * 100 if total_attacks > 0 else 0.0
 
     return {
@@ -208,6 +260,7 @@ def run_proper_train_test_matrix(
     graph_root: Path,
     labels_path: Path,
     output_dir: Path | None = None,
+    final_scores_path: Path | None = None,
 ) -> dict[str, Any]:
     """Execute complete out-of-sample evaluation: Train Days 8-12, Test Days 13-16."""
     t0 = time.time()
@@ -226,6 +279,19 @@ def run_proper_train_test_matrix(
     train_days = [
         load_day_scoring_units(d, seq_root, graph_root, redteam_hours) for d in range(8, 13)
     ]
+    y_train = np.concatenate([d["y"] for d in train_days])
+
+    # Detector alert cut-offs: best F1 on the training days only, so no label from
+    # the test days 13-16 reaches the temporal features.
+    _, seq_cutoff = compute_best_f1(y_train, np.concatenate([d["seq_scores"] for d in train_days]))
+    _, graph_cutoff = compute_best_f1(y_train, np.concatenate([d["graph_scores"] for d in train_days]))
+    print(f"Alert cut-offs fitted on Days 08-12 (best F1): sequence >= {seq_cutoff:.6f}, graph >= {graph_cutoff:.6f}")
+    for d in train_days:
+        add_temporal_features(d, seq_cutoff, graph_cutoff)
+    # The temporal fusion alert threshold (incident input) uses the same rule.
+    _, temporal_cutoff = compute_best_f1(y_train, np.concatenate([d["temp_scores"] for d in train_days]))
+    print(f"Temporal fusion alert threshold fitted on Days 08-12 (best F1): >= {temporal_cutoff:.6f}")
+
     X_train_4 = np.column_stack(
         [
             np.concatenate([d["seq_scores"] for d in train_days]),
@@ -234,7 +300,6 @@ def run_proper_train_test_matrix(
             np.concatenate([d["log_lead_time"] for d in train_days]),
         ]
     )
-    y_train = np.concatenate([d["y"] for d in train_days])
     n_train_units = len(y_train)
     n_train_attacks = int(y_train.sum())
     print(f"Training set: {n_train_units:,} user-hours | Ground-truth attacks: {n_train_attacks}")
@@ -250,6 +315,10 @@ def run_proper_train_test_matrix(
     test_days = [
         load_day_scoring_units(d, seq_root, graph_root, redteam_hours) for d in range(13, 17)
     ]
+    for d in test_days:
+        add_temporal_features(d, seq_cutoff, graph_cutoff)
+    if final_scores_path is not None:
+        load_final_model_scores(final_scores_path, test_days)
     y_test_pool = np.concatenate([d["y"] for d in test_days])
     n_test_units = len(y_test_pool)
     n_test_attacks = int(y_test_pool.sum())
@@ -279,9 +348,15 @@ def run_proper_train_test_matrix(
         ],
         "Baseline: Average Fusion": [d["base_fused"] for d in test_days],
         "DualScope: Temporal Fusion": [d["temp_scores"] for d in test_days],
-        "DualScope: Supervised Fusion": [d["sup_scores"] for d in test_days],
+        LR_NAME: [d["sup_scores"] for d in test_days],
         "Known-Attack Lookup": [d["sig_scores"] for d in test_days],
     }
+    # Ties: file order, except the final model, which keeps its own experiment's
+    # fixed random tie order (seed 0) so its result matches the recorded one.
+    tie_orders: dict[str, list[np.ndarray] | None] = {name: None for name in models}
+    if final_scores_path is not None:
+        models[FINAL_NAME] = [d["final_scores"] for d in test_days]
+        tie_orders[FINAL_NAME] = [d["final_tie_order"] for d in test_days]
 
     # 6. Evaluation at Member 2's empirical GRU alert budget (38 alerts/day x 4 days = 152 alerts)
     budget_daily = 38
@@ -293,18 +368,22 @@ def run_proper_train_test_matrix(
     print(f"  Fixed Budget: {budget_daily} alerts/day ({tot_budget} alerts over 4 days) | Attacks: {n_test_attacks}")
     print("=" * 95)
     header = (
-        f"| {'Model / Detection Architecture':<32} | {'Hits @ 152':<10} | {'Precision':<10} "
+        f"| {'Model / Detection Architecture':<48} | {'Hits @ 152':<10} | {'Precision':<10} "
         f"| {'Recall':<10} | {'PR-AUC (AP)':<12} | {'Best F1':<8} |"
     )
-    separator = f"|{'-'*34}|{'-'*12}|{'-'*12}|{'-'*12}|{'-'*14}|{'-'*10}|"
+    separator = f"|{'-'*50}|{'-'*12}|{'-'*12}|{'-'*12}|{'-'*14}|{'-'*10}|"
     print(header)
     print(separator)
 
+    def daily_top_hits(name: str, k: int) -> list[int]:
+        orders = tie_orders[name] or [None] * len(test_days)
+        return [
+            int(d["y"][top_k(s, k, o)].sum())
+            for d, s, o in zip(test_days, models[name], orders)
+        ]
+
     for name, daily_scores in models.items():
-        daily_hits = []
-        for d, s in zip(test_days, daily_scores):
-            topK = np.argsort(-s, kind="stable")[:budget_daily]
-            daily_hits.append(int(d["y"][topK].sum()))
+        daily_hits = daily_top_hits(name, budget_daily)
 
         tot_hits = sum(daily_hits)
         prec = tot_hits / tot_budget * 100
@@ -332,40 +411,28 @@ def run_proper_train_test_matrix(
         rec_str = f"{rec:>6.2f}%"
         ap_str = f"{ap:>10.6f}"
         f1_str = f"{f1:>6.4f}"
-        print(f"| {name:<32} | {hits_str:<10} | {prec_str:<10} | {rec_str:<10} | {ap_str:<12} | {f1_str:<8} |")
+        print(f"| {name:<48} | {hits_str:<10} | {prec_str:<10} | {rec_str:<10} | {ap_str:<12} | {f1_str:<8} |")
 
     # 7. Budget sensitivity curves (10, 25, 38, 50, 100 alerts/day)
     budget_curve_results: dict[int, list[dict[str, Any]]] = {}
     budgets = [10, 25, 38, 50, 100]
+    curve_models = [name for name in ("GRU Alone (Sequence)", LR_NAME, FINAL_NAME) if name in models]
 
     print("\n" + "=" * 95)
-    print("        BUDGET SENSITIVITY CURVES ACROSS TEST DAYS 13-16")
+    print("        BUDGET SENSITIVITY ACROSS TEST DAYS 13-16 (hits / precision / recall)")
     print("=" * 95)
-    b_header = (
-        f"| {'Alert Budget / Day':<20} | {'Total Alerts (4d)':<18} | {'GRU Alone (Hits)':<18} "
-        f"| {'Supervised (Hits)':<18} | {'Supervised Prec':<16} | {'Supervised Rec':<15} |"
-    )
-    b_sep = f"|{'-'*22}|{'-'*20}|{'-'*20}|{'-'*20}|{'-'*18}|{'-'*17}|"
-    print(b_header)
-    print(b_sep)
+    print(f"| {'Alerts/day':<10} | {'Total':>5} | " + " | ".join(f"{name:<48}" for name in curve_models) + " |")
+    print(f"|{'-'*12}|{'-'*7}|" + "|".join("-" * 50 for _ in curve_models) + "|")
 
     for b in budgets:
         b_tot = b * len(test_days)
         b_entries = []
-        for name in ["GRU Alone (Sequence)", "DualScope: Supervised Fusion"]:
-            daily_scores = models[name]
-            h = sum(int(d["y"][np.argsort(-s, kind="stable")[:b]].sum()) for d, s in zip(test_days, daily_scores))
+        for name in curve_models:
+            h = sum(daily_top_hits(name, b))
             b_entries.append({"model": name, "hits": h, "prec": h / b_tot * 100, "rec": h / n_test_attacks * 100})
         budget_curve_results[b] = b_entries
-
-        gru_entry = b_entries[0]
-        sup_entry = b_entries[1]
-        print(
-            f"| {b:>2} alerts/day        | {b_tot:>3} alerts         "
-            f"| {gru_entry['hits']:>2}/{b_tot} ({gru_entry['rec']:>5.2f}%)   "
-            f"| {sup_entry['hits']:>2}/{b_tot} ({sup_entry['rec']:>5.2f}%)   "
-            f"| {sup_entry['prec']:>6.2f}%         | {sup_entry['rec']:>6.2f}%         |"
-        )
+        cells = [f"{e['hits']:>3} / {e['prec']:>5.2f}% / {e['rec']:>5.2f}%" for e in b_entries]
+        print(f"| {b:<10} | {b_tot:>5} | " + " | ".join(f"{c:<48}" for c in cells) + " |")
 
     # 8. Incident-Level Triage (Task 5.4 Operational Workload & Clustering)
     print("\n" + "=" * 95)
@@ -380,7 +447,7 @@ def run_proper_train_test_matrix(
 
     for d in test_days:
         day = d["day"]
-        alert_mask = d["temp_scores"] >= 0.998188
+        alert_mask = d["temp_scores"] >= temporal_cutoff
         total_raw_fused_alerts += int(alert_mask.sum())
 
         temp_rows = []
@@ -401,7 +468,7 @@ def run_proper_train_test_matrix(
                     fusion_method=FusionMethod.TEMPORAL,
                     disagreement_type=DisagreementType.CONCORDANT_NORMAL,
                     lead_detector="sequence" if d["seq_alerts"][i] else "graph",
-                    lead_time_seconds=int(d["log_lead_time"][i]),
+                    lead_time_seconds=int(d["lead_time_seconds"][i]),
                     seq_score=float(d["seq_scores"][i]),
                     is_seq_alert=bool(d["seq_alerts"][i]),
                     graph_score=float(d["graph_scores"][i]),
@@ -447,6 +514,13 @@ def run_proper_train_test_matrix(
 
     matrix_report = {
         "evaluation_protocol": "Train: Days 08-12 | Test: Days 13-16 (out-of-sample)",
+        "cutoffs_fitted_on_train_days": {
+            "rule": "best F1 on Days 08-12",
+            "sequence_alert": seq_cutoff,
+            "graph_alert": graph_cutoff,
+            "temporal_fusion_alert": temporal_cutoff,
+        },
+        "final_model_scores": str(final_scores_path) if final_scores_path else None,
         "train_units": n_train_units,
         "train_attacks": n_train_attacks,
         "test_units": n_test_units,
@@ -477,13 +551,13 @@ def main() -> None:
     parser.add_argument(
         "--seq-scores-dir",
         type=Path,
-        default=Path("seq-gru-ae-v1-L32-h32/sequence_scores_seq_validation/outputs/sequence_scores/seq-gru-ae-v1/scores"),
+        default=Path("outputs/sequence_scores/seq-gru-ae-v1-L32-h32-91e4b11d34/scores"),
         help="Root directory containing sequence scores dataset_day=XX",
     )
     parser.add_argument(
         "--graph-scores-dir",
         type=Path,
-        default=Path("Long Term Graphs/scores"),
+        default=Path("outputs/graph_scores_v1/scores"),
         help="Root directory containing graph scores dataset_day=XX",
     )
     parser.add_argument(
@@ -498,6 +572,12 @@ def main() -> None:
         default=Path("outputs/evaluation"),
         help="Output directory for matrix reports",
     )
+    parser.add_argument(
+        "--final-model-scores",
+        type=Path,
+        default=None,
+        help="Per-hour Days 13-16 scores of the final gradient boosting model (fitted on Days 08-12)",
+    )
 
     args = parser.parse_args()
     run_proper_train_test_matrix(
@@ -505,6 +585,7 @@ def main() -> None:
         graph_root=args.graph_scores_dir,
         labels_path=args.labels_dir,
         output_dir=args.output_dir,
+        final_scores_path=args.final_model_scores,
     )
 
 
