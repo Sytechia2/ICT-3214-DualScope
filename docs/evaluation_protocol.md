@@ -99,11 +99,11 @@ Model comparison and threshold tuning are governed by the following formal hiera
 
 ## 7. Comparative Benchmark Matrix (Task 9.3 results)
 
-All rows use the same user-hours, labels and budget (top 38 user-hours per day). Supervised models are fitted on Days 08–12; Days 13–16 are unseen evaluation days. Only the frozen final model and its comparators were scored on the test days 17–30, once. Full tables: [model_comparison_matrix.md](model_comparison_matrix.md) (Days 13–16) and [supervised_fusion.md](supervised_fusion.md) (final model and test).
+All rows use the same user-hours, labels and budget (top 38 user-hours per day). Supervised models are fitted on Days 08–12; Days 13–16 are unseen evaluation days. Only the frozen final model, its comparators and the Isolation Forest baseline were scored on the test days 17–30, once each. Full tables: [model_comparison_matrix.md](model_comparison_matrix.md) (Days 13–16) and [supervised_fusion.md](supervised_fusion.md) (final model and test).
 
 | Model | Task | Timescale | Inputs | Days 13–16: caught at 38/day (of 136) | Days 13–16: AP | Days 17–30: caught (of 39) / AP |
 | :--- | :---: | :---: | :--- | :---: | :---: | :---: |
-| Flat Isolation Forest | 9.2 | 1 hour | Tabular hourly aggregates | not yet run on LANL | – | – |
+| Flat Isolation Forest | 9.2 | 1 hour | 16 tabular hourly aggregates | 0 | 0.0003 | 0 / 0.00002 |
 | Short-term GRU autoencoder | 3.3 | 1 hour | Event sequences (L = 32) | 4 | 0.0046 | 0 / 0.00020 |
 | Long-term graph GAE | 4.3 | 24 hours | Bipartite user–computer graph | 1 | 0.0019 | not scored here¹ |
 | Average fusion | 5.2 | 1 h + 24 h | GRU + graph scores | 8 | 0.0123 | – |

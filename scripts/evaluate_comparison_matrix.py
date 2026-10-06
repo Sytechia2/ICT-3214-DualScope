@@ -54,6 +54,7 @@ from dualscope.graph.threat_history import ThreatHistory
 
 LR_NAME = "Supervised Fusion: LogReg (seq+graph+temporal)"
 FINAL_NAME = "DualScope Final: GradBoost (GRU+hourly counts)"
+IFOREST_NAME = "Baseline: Isolation Forest (flat features)"
 
 
 def load_redteam_labels(labels_path: Path) -> tuple[set[tuple[str, int]], list[dict[str, Any]]]:
@@ -178,6 +179,25 @@ def load_final_model_scores(path: Path, test_days: list[dict[str, Any]]) -> None
         d["final_tie_order"] = np.array([p[1] for p in pairs], dtype=np.int64)
 
 
+def load_baseline_scores(path: Path, test_days: list[dict[str, Any]]) -> None:
+    """Attach Isolation Forest scores (``user_id``, ``window_start``, ``score``) to each test day.
+
+    The baseline scores every user-hour with events; a test unit without a
+    baseline score fails the run, so every model is compared on the same units.
+    """
+    table = pq.read_table(str(path), columns=["user_id", "window_start", "score"])
+    by_unit = {
+        (u, int(w)): float(s)
+        for u, w, s in zip(table["user_id"].to_pylist(), table["window_start"].to_numpy(), table["score"].to_numpy())
+    }
+    for d in test_days:
+        scores = [by_unit.get((u, int(w))) for u, w in zip(d["users"], d["windows"])]
+        missing = sum(x is None for x in scores)
+        if missing:
+            raise SystemExit(f"baseline scores missing for {missing:,} day-{d['day']} units in {path}")
+        d["baseline_scores"] = np.array(scores, dtype=np.float64)
+
+
 def top_k(scores: np.ndarray, k: int, tie_order: np.ndarray | None = None) -> np.ndarray:
     """Indices of the ``k`` highest scores; ties by ``tie_order``, else file order."""
     if tie_order is None:
@@ -261,6 +281,7 @@ def run_proper_train_test_matrix(
     labels_path: Path,
     output_dir: Path | None = None,
     final_scores_path: Path | None = None,
+    baseline_scores_path: Path | None = None,
 ) -> dict[str, Any]:
     """Execute complete out-of-sample evaluation: Train Days 8-12, Test Days 13-16."""
     t0 = time.time()
@@ -319,6 +340,8 @@ def run_proper_train_test_matrix(
         add_temporal_features(d, seq_cutoff, graph_cutoff)
     if final_scores_path is not None:
         load_final_model_scores(final_scores_path, test_days)
+    if baseline_scores_path is not None:
+        load_baseline_scores(baseline_scores_path, test_days)
     y_test_pool = np.concatenate([d["y"] for d in test_days])
     n_test_units = len(y_test_pool)
     n_test_attacks = int(y_test_pool.sum())
@@ -354,6 +377,9 @@ def run_proper_train_test_matrix(
     # Ties: file order, except the final model, which keeps its own experiment's
     # fixed random tie order (seed 0) so its result matches the recorded one.
     tie_orders: dict[str, list[np.ndarray] | None] = {name: None for name in models}
+    if baseline_scores_path is not None:
+        models[IFOREST_NAME] = [d["baseline_scores"] for d in test_days]
+        tie_orders[IFOREST_NAME] = None
     if final_scores_path is not None:
         models[FINAL_NAME] = [d["final_scores"] for d in test_days]
         tie_orders[FINAL_NAME] = [d["final_tie_order"] for d in test_days]
@@ -416,7 +442,7 @@ def run_proper_train_test_matrix(
     # 7. Budget sensitivity curves (10, 25, 38, 50, 100 alerts/day)
     budget_curve_results: dict[int, list[dict[str, Any]]] = {}
     budgets = [10, 25, 38, 50, 100]
-    curve_models = [name for name in ("GRU Alone (Sequence)", LR_NAME, FINAL_NAME) if name in models]
+    curve_models = [name for name in ("GRU Alone (Sequence)", IFOREST_NAME, LR_NAME, FINAL_NAME) if name in models]
 
     print("\n" + "=" * 95)
     print("        BUDGET SENSITIVITY ACROSS TEST DAYS 13-16 (hits / precision / recall)")
@@ -521,6 +547,7 @@ def run_proper_train_test_matrix(
             "temporal_fusion_alert": temporal_cutoff,
         },
         "final_model_scores": str(final_scores_path) if final_scores_path else None,
+        "baseline_scores": str(baseline_scores_path) if baseline_scores_path else None,
         "train_units": n_train_units,
         "train_attacks": n_train_attacks,
         "test_units": n_test_units,
@@ -578,6 +605,12 @@ def main() -> None:
         default=None,
         help="Per-hour Days 13-16 scores of the final gradient boosting model (fitted on Days 08-12)",
     )
+    parser.add_argument(
+        "--baseline-scores",
+        type=Path,
+        default=None,
+        help="Isolation Forest validation scores from train_baseline_isolation_forest.py",
+    )
 
     args = parser.parse_args()
     run_proper_train_test_matrix(
@@ -586,6 +619,7 @@ def main() -> None:
         labels_path=args.labels_dir,
         output_dir=args.output_dir,
         final_scores_path=args.final_model_scores,
+        baseline_scores_path=args.baseline_scores,
     )
 
 

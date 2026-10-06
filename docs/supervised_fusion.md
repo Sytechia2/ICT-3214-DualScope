@@ -39,6 +39,7 @@ The model was refitted on all of Days 8–16 with the same settings, frozen, and
 | GRU alone | 0 | 0.00020 | 0.846 |
 | GRU, human accounts only | 0 | 0.00043 | 0.944 |
 | Counting rule | 0 | 0.00006 | 0.598 |
+| Isolation Forest baseline | 0 | 0.00002 | 0.675 |
 
 - **Primary rule** (at least 2× the GRU's catches, at least 2 when the GRU catches 0, and a higher AP): **not met**.
 - **Secondary rule** (more catches and higher AP than the GRU on human accounts only): **met**.
