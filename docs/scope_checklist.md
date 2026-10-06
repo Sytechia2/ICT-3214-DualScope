@@ -4,17 +4,19 @@ This checklist captures the detailed-guide Task 1.1 decision. It should be revie
 
 ## Core prototype
 
-- [ ] Authentication records are the core input source.
-- [ ] A reproducible LANL subset is selected and documented.
-- [ ] Chronological training, validation and test periods are defined.
-- [ ] A short-term sequence detector is trained and evaluated.
+Status as of 2026-10-06 (ticked from the code on `main`).
+
+- [x] Authentication records are the core input source.
+- [x] A reproducible LANL subset is selected and documented (Days 1–30).
+- [x] Chronological training, validation and test periods are defined.
+- [x] A short-term sequence detector is trained and evaluated.
 - [x] A long-term authentication-graph detector is trained and evaluated, including imbalanced metrics and a chronological overfitting check.
-- [ ] A flat-feature Isolation Forest baseline is included.
-- [ ] Maximum, average, weighted and temporal fusion are compared.
-- [ ] Incidents retain detector score breakdowns and source evidence references.
+- [ ] A flat-feature Isolation Forest baseline is included. (Code in place, Task 9.2; not yet run on the LANL data.)
+- [x] Maximum, average, weighted and temporal fusion are compared, plus supervised fusion ([model_comparison_matrix.md](model_comparison_matrix.md)).
+- [x] Incidents retain detector score breakdowns and source evidence references.
 - [ ] ATT&CK retrieval, investigation generation and evidence verification are compared in three modes: direct, RAG and RAG with verification.
 - [ ] The dashboard supports incident navigation, detector evidence and investigation status.
-- [ ] Detection performance and investigation reliability are evaluated separately.
+- [ ] Detection performance and investigation reliability are evaluated separately. (Detection done, including the one-time test; investigation reliability waits for the investigation component.)
 
 ## Optional extensions
 
@@ -30,8 +32,8 @@ These are not completion blockers and should begin only after the core pipeline 
 - [ ] Read the module brief and record actual submission files, marking criteria, page limits and presentation requirements.
 - [ ] Replace provisional Member 1–6 labels with names.
 - [ ] Nominate the report coordinator and accountable submitter.
-- [ ] Agree on the initial dataset subset and compute budget.
-- [ ] Agree on the primary scoring unit, acting-user definition and shared schemas.
+- [x] Agree on the initial dataset subset and compute budget.
+- [x] Agree on the primary scoring unit, acting-user definition and shared schemas (acting user × hour).
 - [ ] Record what scope is reduced first if runtime is too high; the workplans recommend reducing data or model size and deferring optional sources while retaining both detectors and the baseline.
 
 ## Acceptance

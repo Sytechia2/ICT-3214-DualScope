@@ -8,7 +8,7 @@ Each validation user-hour (acting user, hour) is scored by counting its events w
 
 Ties are broken by a fixed random order (seed 0), so the alert budget does not
 depend on file or user order. Units, labels, budget and metrics are the same as
-``experiment_v2_evaluate.py``. No model, no training and no labels are used to
+``evaluate_sequence_runs.py``. No model, no training and no labels are used to
 build the scores; validation labels are used only to evaluate them.
 """
 
@@ -25,7 +25,7 @@ import pandas as pd
 import pyarrow.dataset as ds
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("experiment_v2_evaluate", REPO_ROOT / "scripts" / "experiment_v2_evaluate.py")
+_spec = importlib.util.spec_from_file_location("evaluate_sequence_runs", REPO_ROOT / "scripts" / "evaluate_sequence_runs.py")
 _evaluate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_evaluate)
 

@@ -6,7 +6,7 @@
 2. **Split**:
    - **Training (Days 08–12)**: 1,969,281 user-hours, 84 red-team attack user-hours (82 of them on Day 09). Used to fit the supervised models and every label-based threshold.
    - **Evaluation (Days 13–16)**: 1,776,074 user-hours, 136 attack user-hours. Never used for fitting or threshold choice.
-   - **Days 17–30**: not read by this evaluation. They are reserved for the final one-time test of the frozen model.
+   - **Days 17–30**: not read by this evaluation. They were used once, for the final test of the frozen model (1 of 39 attack hours caught at 38 alerts/day, GRU 0; see [supervised_fusion.md](supervised_fusion.md)).
 3. **Thresholds**: the sequence and graph alert cut-offs (which drive the temporal boost and lead time) and the temporal fusion alert threshold (which feeds incident generation) are all chosen by best F1 on Days 08–12. The `is_alert` flags in the exported detector scores are not used, because their thresholds were chosen on all validation days 8–16, which include the evaluation days.
 4. **Alert budget**: 38 alerts/day (152 over the 4 evaluation days), the top 38 user-hours per day by score. 38 is the GRU's alert rate at its validation-chosen threshold (340 alerts over 9 validation days ≈ 37.8/day), used so every model is compared at the same workload. It is not a measured SOC capacity. Because the budget is per day, recall is capped: Days 13–16 have 68, 36, 15 and 17 attack hours, so at most 38 + 36 + 15 + 17 = 106 of 136 can be caught (77.9%). (Day 09 alone, with 82 attack hours, would be capped at 38 / 82 = 46.3%.)
 5. **Primary vs. operational view**: the hourly matrix is the primary comparison. Incident-level triage (Task 5.4) is reported separately with its review workload.
@@ -26,7 +26,7 @@
 | Known-attack lookup | 0 | 0.00% | 0.00% | 0.004253 | 0.0240 | Non-ML: users in confirmed history before Day 13 |
 | **DualScope final: gradient boosting** | **16** | **10.53%** | **11.76%** | **0.049843** | **0.1333** | **GRU score + hourly authentication counts** |
 
-The final model is the HistGradientBoosting fusion from branch `experiment/features-v2` (`docs/experiment_features_v2.md`), fitted on Days 08–12 with its settings fixed in advance. Its inputs are the GRU score and per-hour counts (events, failures, distinct sources and destinations, first-time user→source, host→host and user→destination connections, NTLM, Network logon type, LogOn) plus a machine-account flag. Its scores are exported by that experiment's code and passed in with `--final-model-scores`. Ties are broken by that experiment's fixed random order (seed 0), so the row matches its recorded result (16/136, AP 0.04984).
+The final model is the HistGradientBoosting supervised fusion ([supervised_fusion.md](supervised_fusion.md)), fitted on Days 08–12 with its settings fixed in advance. Its inputs are the GRU score and per-hour counts (events, failures, distinct sources and destinations, first-time user→source, host→host and user→destination connections, NTLM, Network logon type, LogOn) plus a machine-account flag. Its scores are exported with the model's own code (`scripts/supervised_fusion_validate.py`) and passed in with `--final-model-scores`. Ties are broken by that experiment's fixed random order (seed 0), so the row matches its recorded result (16/136, AP 0.04984).
 
 ---
 
@@ -99,10 +99,10 @@ An earlier test that added graph structural counters (`new_edge_count`, `degree_
 
 ## 7. Reproduction
 
-1. Export the final model's Days 13–16 scores (fitted on Days 08–12). The exporter reuses the unchanged supervised fusion code of branch `experiment/features-v2` and its cached inputs (`outputs/experiment_v2/units_A.parquet`, `fusion_counts.parquet`), and refuses to write unless it reproduces 16/136 and AP 0.04984. Until that branch is merged, pass a checkout of it:
+1. Export the final model's Days 13–16 scores (fitted on Days 08–12). The exporter reuses the supervised fusion code and its cached inputs (`outputs/experiment_v2/units_A.parquet`, `fusion_counts.parquet`), and refuses to write unless it reproduces 16/136 and AP 0.04984:
 
 ```powershell
-.\.venv\Scripts\python scripts/export_final_model_scores.py --experiment-root <checkout of experiment/features-v2>
+.\.venv\Scripts\python scripts/export_final_model_scores.py
 ```
 
 2. Run the matrix (detector score paths are the defaults: `outputs/sequence_scores/seq-gru-ae-v1-L32-h32-91e4b11d34/scores` from Member 2's validation package and `outputs/graph_scores_v1/scores` from the graph package):

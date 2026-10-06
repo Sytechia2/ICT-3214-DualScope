@@ -3,7 +3,7 @@
 One row per validation user-hour (acting user, hour), days 8-16. Inputs are
 label-free and contain no user or computer names:
 
-* run A's raw ``max_event`` score, from ``experiment_v2_evaluate.py --units-output``;
+* run A's raw ``max_event`` score, from ``evaluate_sequence_runs.py --units-output``;
 * hourly counts from the v2 raw events (events, failures, distinct sources and
   destinations, the three novelty flags, NTLM, Network logon type, LogOn);
 * ``is_machine_account``.
@@ -12,11 +12,11 @@ Two models with settings fixed in advance (logistic regression and
 HistGradientBoosting, both class-balanced) are fitted on days 8-12 with
 validation red-team labels and compared on days 13-16 with the GRU alone and the
 counting rule "either". Units, labels, budget and metrics are those of
-``experiment_v2_evaluate.py``. Test days (17-30) are never loaded and test
+``evaluate_sequence_runs.py``. Test days (17-30) are never loaded and test
 labels are never read.
 
 Example:
-  python scripts/experiment_v2_fusion.py --features-root data/processed/lanl_features_v2_days_01_16 \
+  python scripts/supervised_fusion_validate.py --features-root data/processed/lanl_features_v2_days_01_16 \
     --units outputs/experiment_v2/units_A.parquet
 """
 
@@ -39,7 +39,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("experiment_v2_evaluate", REPO_ROOT / "scripts" / "experiment_v2_evaluate.py")
+_spec = importlib.util.spec_from_file_location("evaluate_sequence_runs", REPO_ROOT / "scripts" / "evaluate_sequence_runs.py")
 _evaluate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_evaluate)
 
@@ -125,7 +125,7 @@ MODELS = {
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--features-root", type=Path, required=True)
-    parser.add_argument("--units", type=Path, required=True, help="Per-unit GRU scores from experiment_v2_evaluate.py --units-output")
+    parser.add_argument("--units", type=Path, required=True, help="Per-unit GRU scores from evaluate_sequence_runs.py --units-output")
     parser.add_argument("--splits-config", type=Path, default=REPO_ROOT / "config/lanl_splits.json")
     parser.add_argument("--labels-dir", type=Path, default=REPO_ROOT / "data/processed/lanl_auth_days_01_30/redteam_labels/labels")
     parser.add_argument("--counts-cache", type=Path, default=REPO_ROOT / "outputs/experiment_v2/fusion_counts.parquet")
@@ -164,7 +164,7 @@ def main() -> int:
         raise SystemExit("is_machine_account disagrees with the evaluation's machine split")
     if int(frame["label"].sum()) != len(positives):
         raise SystemExit(f"only {int(frame['label'].sum())} of {len(positives)} positives matched")
-    # Fixed random tie-break, as in experiment_v2_rules.py: canonical order, one shuffle, stable sorts afterwards.
+    # Fixed random tie-break, as in evaluate_counting_rules.py: canonical order, one shuffle, stable sorts afterwards.
     frame = frame.sort_values(["day", "user", "hour"], kind="stable").sample(frac=1.0, random_state=0).reset_index(drop=True)
 
     train = frame[frame["day"].isin(TRAIN_DAYS)].reset_index(drop=True)

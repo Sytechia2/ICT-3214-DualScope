@@ -3,7 +3,7 @@
 Refits the model that met the Option A success rule (HistGradientBoosting,
 settings unchanged) on all validation days 8-16 and writes it with a manifest
 (inputs, settings, training data, hashes). Uses the hourly counts cache and run
-A's per-unit scores from ``experiment_v2_fusion.py``. Test days are never
+A's per-unit scores from ``supervised_fusion_validate.py``. Test days are never
 loaded and test labels are never read.
 """
 
@@ -22,7 +22,7 @@ import pandas as pd
 import sklearn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("experiment_v2_fusion", REPO_ROOT / "scripts" / "experiment_v2_fusion.py")
+_spec = importlib.util.spec_from_file_location("supervised_fusion_validate", REPO_ROOT / "scripts" / "supervised_fusion_validate.py")
 _fusion = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_fusion)
 

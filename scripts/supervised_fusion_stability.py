@@ -9,14 +9,14 @@ to 13/136. This script measures that sensitivity on validation days only:
   independently per seed (default sigma 3e-4, which gives the observed median
   relative change of about 2e-4);
 * both fusion models are refitted on days 8-12 with their fixed settings and
-  scored on days 13-16, exactly as in ``experiment_v2_fusion.py``.
+  scored on days 13-16, exactly as in ``supervised_fusion_validate.py``.
 
 The median and range over seeds are the reported validation result. Test days
 (17-30) are never loaded and test labels are never read. The frozen model is
 not changed.
 
 Example:
-  python scripts/experiment_v2_stability.py --units outputs/final_test/units_A.parquet \
+  python scripts/supervised_fusion_stability.py --units outputs/final_test/units_A.parquet \
     --counts outputs/final_test/fusion_counts.parquet --output outputs/final_test/stability.json
 """
 
@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-_spec = importlib.util.spec_from_file_location("experiment_v2_fusion", REPO_ROOT / "scripts" / "experiment_v2_fusion.py")
+_spec = importlib.util.spec_from_file_location("supervised_fusion_validate", REPO_ROOT / "scripts" / "supervised_fusion_validate.py")
 _fusion = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_fusion)
 

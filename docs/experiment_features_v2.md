@@ -2,6 +2,7 @@
 
 Owner: Member 1 (data prep), building on Member 2's sequence detector.
 Results: `outputs/experiment_v2/results.json` and `rules.json` (not in Git). Logs: `logs/experiment_v2/`.
+Summary of the final model and its test: [supervised_fusion.md](supervised_fusion.md). The `experiment_v2_*` scripts were renamed on 2026-10-06 (`evaluate_sequence_runs.py`, `evaluate_counting_rules.py`, `supervised_fusion_validate.py`, `supervised_fusion_freeze.py`, `supervised_fusion_final_test.py`, `supervised_fusion_stability.py`); commands below use the new names. Output folders keep their names.
 Branch: `experiment/features-v2`. Status: **done (2026-10-02)**. Result: **no clear improvement**; the success rule was not met (see results log). Follow-up Option A (supervised fusion): **success rule met** by gradient boosting (16 vs 4 attacks at 38 alerts/day on days 13–16); see its section below. Final test on days 17–30 (2026-10-06): **primary rule not met** (1 of 39 attacks at 38/day vs the GRU's 0; AP 0.00124 vs 0.00020); see "Final test results".
 
 ## In plain words
@@ -143,7 +144,7 @@ Report for A, B and C:
 
 ## Follow-up: label-free counting rules (2026-10-02)
 
-`scripts/experiment_v2_rules.py`. Each validation user-hour is scored by counting events with a novelty flag. No model and no training. Rules were fixed before the run, and ties are broken by a fixed random order. Same units (3,745,355 user-hours, 220 positives), labels and budget as above.
+`scripts/evaluate_counting_rules.py`. Each validation user-hour is scored by counting events with a novelty flag. No model and no training. Rules were fixed before the run, and ties are broken by a fixed random order. Same units (3,745,355 user-hours, 220 positives), labels and budget as above.
 
 | Scorer | AP | ROC-AUC | TP at 38/day | Alerts machine / human | User-day AP | User-day TP at 38/day |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -182,13 +183,13 @@ Label counts per day (counted before fitting anything; these are counts, not res
 - Logistic regression: `log1p` of every count, `log(gru_max_event + 1e-12)`, `is_machine_account` as 0/1, then `StandardScaler`; `LogisticRegression(class_weight="balanced", C=1.0, max_iter=2000)`.
 - `HistGradientBoostingClassifier(class_weight="balanced", random_state=0)`, other settings scikit-learn defaults (its default early stopping holds out 10% of the **training** days).
 
-**Compared on days 13–16:** GRU alone, counting rule "either" (events with `is_new_user_source` or `is_new_host_connection`, as in the rules follow-up; a comparator only, not a model input), logistic regression, gradient boosting. Metrics from `experiment_v2_evaluate.evaluate`: AP, ROC-AUC, TP in the top 38 user-hours per day, machine/human split of those alerts, the user-day versions. Ties are broken by the same fixed random order (seed 0) as the rules. Feature importance: standardised coefficients (LR), and permutation importance on days 13–16 scored by AP (5 repeats; for reporting only).
+**Compared on days 13–16:** GRU alone, counting rule "either" (events with `is_new_user_source` or `is_new_host_connection`, as in the rules follow-up; a comparator only, not a model input), logistic regression, gradient boosting. Metrics from `evaluate_sequence_runs.evaluate`: AP, ROC-AUC, TP in the top 38 user-hours per day, machine/human split of those alerts, the user-day versions. Ties are broken by the same fixed random order (seed 0) as the rules. Feature importance: standardised coefficients (LR), and permutation importance on days 13–16 scored by AP (5 repeats; for reporting only).
 
 **Success rule (fixed):** a real gain only if a model catches **≥ 2× the GRU's true positives at 38/day on days 13–16** **and** has **higher AP** than the GRU there. Edge case fixed in advance: if the GRU catches 0 on days 13–16, the model must catch at least 2.
 
 ### Option A results (2026-10-02)
 
-Run: `scripts/experiment_v2_evaluate.py --run A=... --units-output outputs/experiment_v2/units_A.parquet` (re-score on GPU; reproduces AP 0.00598 and 8 of 220 exactly, log `rescore_A.log`), then `scripts/experiment_v2_fusion.py` (log `fusion.log`, numbers `outputs/experiment_v2/fusion.json`). Fit on days 8–12 (1,969,281 user-hours, 84 positive). All rows below are days 13–16: 1,776,074 user-hours, 136 positive user-hours, 88 positive user-days, 38 alerts per day = 152 alerts.
+Run: `scripts/evaluate_sequence_runs.py --run A=... --units-output outputs/experiment_v2/units_A.parquet` (re-score on GPU; reproduces AP 0.00598 and 8 of 220 exactly, log `rescore_A.log`), then `scripts/supervised_fusion_validate.py` (log `fusion.log`, numbers `outputs/experiment_v2/fusion.json`). Fit on days 8–12 (1,969,281 user-hours, 84 positive). All rows below are days 13–16: 1,776,074 user-hours, 136 positive user-hours, 88 positive user-days, 38 alerts per day = 152 alerts.
 
 | Scorer | AP | ROC-AUC | TP at 38/day | Alerts machine / human | User-day AP | User-day TP at 38/day |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -215,7 +216,7 @@ Checks (for interpretation only; they don't change the verdict):
 
 ## Final test on days 17–30 (plan fixed 2026-10-02, before any test-day data was built)
 
-**Frozen model.** `scripts/experiment_v2_freeze_fusion.py` → `models/fusion/experiment_v2/frozen/` (`model.joblib` + `manifest.json`): gradient boosting, settings unchanged, refitted on all of days 8–16 (3,745,355 user-hours, 220 positives; 39 boosting iterations), code at commit `85b0ff1`, model sha256 `bf9ffc58be29…`. GRU input: run A `max_event`. Nothing is changed after this point.
+**Frozen model.** `scripts/supervised_fusion_freeze.py` → `models/fusion/experiment_v2/frozen/` (`model.joblib` + `manifest.json`): gradient boosting, settings unchanged, refitted on all of days 8–16 (3,745,355 user-hours, 220 positives; 39 boosting iterations), code at commit `85b0ff1`, model sha256 `bf9ffc58be29…`. GRU input: run A `max_event`. Nothing is changed after this point.
 
 **Who runs it:** this laptop (31 GB RAM) couldn't run the days 1–30 build with 12 workers. The team reruns steps 1–6 of [supervised_fusion_handover.md](supervised_fusion_handover.md) from branch `experiment/features-v2` on their machine: same code and fixed settings, so the refrozen model is the same model up to tiny numeric differences, and its own manifest records its hash.
 
@@ -243,7 +244,7 @@ Checks (for interpretation only; they don't change the verdict):
 | Fusion check | `--counts-cache outputs/final_test/fusion_counts.parquet` (a new cache, so counts come from the new build) | Hourly counts identical to Option A. GRU scores differ slightly (median relative difference 0.02%, rank correlation 0.9999998; original scored on GPU, these on CPU). Gradient boosting: **13 / 136**, AP 0.0348 (Option A: 16, 0.0498). Still meets the success rule |
 | Freeze | `--gru-run models/sequence/runs_final_test/A --output models/fusion/final_test/frozen` | Same settings, days 8–16, 45 iterations, model sha256 `02b4e6f7e3d1…`. Nothing changed after this point |
 
-**Stability check (validation only, before the test).** Because a 0.02% change in the GRU scores moved gradient boosting from 16 to 13, `scripts/experiment_v2_stability.py` refitted both models on days 8–12 ten times with the GRU scores multiplied by (1 + e), e ~ Normal(0, 3 × 10⁻⁴) (the observed size of the change), and scored days 13–16 (`outputs/final_test/stability.json`). Gradient boosting: **median 16 / 136, range 13–18; AP median 0.042, range 0.035–0.051**. Logistic regression: 4 / 136 in every run. Every run meets the success rule. The validation result to report is therefore "16 of 136 (13–18 under numeric noise)", 3–4.5× the GRU's 4.
+**Stability check (validation only, before the test).** Because a 0.02% change in the GRU scores moved gradient boosting from 16 to 13, `scripts/supervised_fusion_stability.py` refitted both models on days 8–12 ten times with the GRU scores multiplied by (1 + e), e ~ Normal(0, 3 × 10⁻⁴) (the observed size of the change), and scored days 13–16 (`outputs/final_test/stability.json`). Gradient boosting: **median 16 / 136, range 13–18; AP median 0.042, range 0.035–0.051**. Logistic regression: 4 / 136 in every run. Every run meets the success rule. The validation result to report is therefore "16 of 136 (13–18 under numeric noise)", 3–4.5× the GRU's 4.
 
 **Test (days 17–30).** Day-16 reproduction check: 431,200 user-hours, max GRU score difference 0, counts equal. 5,537,311 test user-hours, all with events scored. **39 positive user-hours**, all scored, from 34 positive user-days; 28 of the 39 are on days 27 (20) and 28 (8).
 

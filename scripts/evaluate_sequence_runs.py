@@ -15,7 +15,7 @@ Reported per variant and aggregation, using validation red-team labels only:
 Test days are never loaded and test labels are never read.
 
 Example:
-  python scripts/experiment_v2_evaluate.py --allow-pilot-features --device cuda \
+  python scripts/evaluate_sequence_runs.py --allow-pilot-features --device cuda \
     --features-root data/processed/lanl_features_v2_days_01_16 \
     --run A=models/sequence/runs_experiment_v2/A --run B=models/sequence/runs_experiment_v2/B --scaled A --scaled B
 """

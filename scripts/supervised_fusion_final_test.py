@@ -7,7 +7,7 @@ validation inputs the model was fitted on (preprocessing hash, day 16 GRU scores
 and hourly counts). Refuses to run if its output already exists.
 
 Example:
-  python scripts/experiment_v2_final_test.py --device cuda \
+  python scripts/supervised_fusion_final_test.py --device cuda \
     --features-root data/processed/lanl_features_v2_days_01_30
 """
 
@@ -26,10 +26,10 @@ import pyarrow.dataset as ds
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 _load = importlib.util.spec_from_file_location
-_spec = _load("experiment_v2_fusion", REPO_ROOT / "scripts" / "experiment_v2_fusion.py")
+_spec = _load("supervised_fusion_validate", REPO_ROOT / "scripts" / "supervised_fusion_validate.py")
 _fusion = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_fusion)
-_spec = _load("experiment_v2_freeze_fusion", REPO_ROOT / "scripts" / "experiment_v2_freeze_fusion.py")
+_spec = _load("supervised_fusion_freeze", REPO_ROOT / "scripts" / "supervised_fusion_freeze.py")
 _freeze = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_freeze)
 _evaluate = _fusion._evaluate
