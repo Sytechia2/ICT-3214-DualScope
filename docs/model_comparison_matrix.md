@@ -99,7 +99,12 @@ An earlier test that added graph structural counters (`new_edge_count`, `degree_
 
 ## 7. Reproduction
 
-1. Final model scores for Days 13–16 (fitted on Days 08–12) are written to `outputs/experiment_v2/final_model_scores_days13_16.parquet` (`user_id`, `window_start`, `score`, `tie_order`) by the supervised fusion code on branch `experiment/features-v2`.
+1. Export the final model's Days 13–16 scores (fitted on Days 08–12). The exporter reuses the unchanged supervised fusion code of branch `experiment/features-v2` and its cached inputs (`outputs/experiment_v2/units_A.parquet`, `fusion_counts.parquet`), and refuses to write unless it reproduces 16/136 and AP 0.04984. Until that branch is merged, pass a checkout of it:
+
+```powershell
+.\.venv\Scripts\python scripts/export_final_model_scores.py --experiment-root <checkout of experiment/features-v2>
+```
+
 2. Run the matrix (detector score paths are the defaults: `outputs/sequence_scores/seq-gru-ae-v1-L32-h32-91e4b11d34/scores` from Member 2's validation package and `outputs/graph_scores_v1/scores` from the graph package):
 
 ```powershell
