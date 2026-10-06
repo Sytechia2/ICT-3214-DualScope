@@ -43,7 +43,7 @@ python scripts/smoke_test.py
 
 The smoke check uses only the tracked synthetic fixture and does not require LANL data, model checkpoints or external service credentials.
 
-## Incident dashboard (Task 7.1)
+## Incident dashboard (Tasks 7.1 and 7.2)
 
 Install `requirements.txt`, then launch the read-only analyst dashboard from the repository root:
 
@@ -52,6 +52,15 @@ streamlit run scripts/incident_dashboard.py
 ```
 
 It opens the tracked **Synthetic fixture** (`data/fixtures/incidents_mock.jsonl`) by default. These records and their score and evidence fields are illustrative, not detector results, traceable evidence, or a live feed. Select **Local JSONL export** in the sidebar and enter a local path to view a saved full incident export from `scripts/align_and_fuse_scores.py --incidents-output <path>.jsonl`. The dashboard identifies this as a saved file, not a live feed, and reports missing or malformed files without switching to the fixture. Incident times are dataset-relative seconds, with half-open `[start, end)` ranges. The dashboard consumes packaged incidents only; it does not run detectors. The current Parquet incident export omits nested detector scores, so this dashboard accepts JSONL.
+
+Select **Alert handoff package** to open the final model's days 17–30 alerts (`outputs/handoff/final_test_alerts_v1/incidents.jsonl`, built by `scripts/export_alert_handoff.py`; see `docs/alert_handoff.md`). An incident's detail view then adds the Task 7.2 evidence panels:
+
+- **Alerted hours:** rank, tie status and scores per hour.
+- **Authentication events:** a time-ordered timeline of every cited event; selecting a row shows its full source record.
+- **User–host relationships:** one row per source → destination pair, with first-time pairs listed first.
+- **Graph detector context:** labelled as not used by the final model.
+
+Event details come from `events.parquet` in the same folder as the incident file; without it, the view lists the event references only. The red-team answer key stays hidden unless **Show answer key (evaluation only)** is switched on in the sidebar.
 
 ## Planned top-level layout
 
