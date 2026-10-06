@@ -1,45 +1,37 @@
 # DualScope
 
-Multi-timescale intrusion detection using sequence and graph-based behavioural analysis.
+Multi-timescale intrusion detection using sequence and graph-based behavioural analysis, on the LANL authentication dataset.
 
-This repository is being built from the shared workplans in:
+The work plan (WBS and detailed task guide) is kept outside the repository; task numbers below follow it. The scope checklist is [docs/scope_checklist.md](docs/scope_checklist.md) and environment setup is [docs/environment_setup.md](docs/environment_setup.md).
 
-- [DualScope WBS](DualScope_WBS.md)
-- [Detailed task implementation guide](DualScope_Detailed_Tasks.md)
-- [Scope and deliverables checklist](docs/scope_checklist.md)
-- [Development environment setup](docs/environment_setup.md)
+## Current status (2026-10-06)
 
-## Current status
+### Headline result
 
-Tasks 4.1–4.4, the long-term graph detector, are implemented: causal rolling bipartite snapshots, a feature-based graph convolutional autoencoder, validation-only calibration/thresholding, and common-schema user score/evidence export. See [the graph detector guide](docs/graph_detector.md) and [downstream handoff](docs/graph_detector_handoff.md). Production training and evaluation artifacts are local/ignored and must be generated with the provided scripts.
+The final detection model is a **supervised fusion** (gradient boosting on the GRU score and hourly authentication counts), fitted on validation labels and tested once on Days 17–30. See [docs/supervised_fusion.md](docs/supervised_fusion.md).
 
-The long-term detector exports two separate relationship signals in one artifact: counter-enhanced unsupervised GAE novelty and high-confidence confirmed-relationship recurrence. The GAE reaches test F1 `0.0769`; confirmed recurrence reaches precision `0.8286`, recall `0.8529`, and F1 `0.8406` on a retrospective Days 17–30 backtest. The latter is a supervised recurrence signature, not the autoencoder result, and requires a fresh holdout before it is treated as an unbiased final estimate. A raw union is available for analyst review but has F1 `0.2308`, so it is not used to claim the 84.06% result. See the [graph evaluation report](docs/graph_model_evaluation.md), [downstream handoff](docs/graph_detector_handoff.md), and [overfitting-check guide](docs/graph_overfitting.md).
+| Days 13–16 (validation, 136 attack hours) | Caught at 38 alerts/day | AP |
+| --- | ---: | ---: |
+| GRU alone | 4 | 0.0046 |
+| Final model | 16 (13–18 under numeric noise) | 0.050 |
 
-Tasks 3.1–3.4, the short-term sequence detector, are implemented and frozen:
+| Days 17–30 (test, run once, 39 attack hours) | Caught at 38 alerts/day | AP |
+| --- | ---: | ---: |
+| GRU alone | 0 | 0.00020 |
+| Final model | 1 | 0.00124 |
 
-- **3.1 Sequences:** 11,846,723 acting-user/hour sequences, with zero boundary violations and Day 1 marked as warm-up.
-- **3.2 Models:** six GRU sequence autoencoders trained on 2,238,183 eligible training user-hours.
-- **3.3 Selection:** the settings were chosen on validation data only.
-- **3.4 Export:** calibrated 0–1 user-hour scores with explicit statuses and retrievable `auth.txt` evidence were exported for Days 1–30.
+The model ranks attacks much better than the GRU on unseen days, but at 38 alerts per day it catches almost none of the test-period attacks; its pre-set primary success rule was not met.
 
-The selected model (`seq-gru-ae-v1-L32-h32-91e4b11d34`) reaches validation average precision 0.0060 (102× the 5.9 × 10⁻⁵ prevalence) and ROC-AUC 0.88. At its max-F1 threshold it gives 37.8 alerts per day with 3.2% precision and 5.0% recall. These are weak standalone user-hour results, reported as found. Test labels were not used.
+### By work package
 
-The detector was fitted on a production run of the Task 2.4 pipeline (all 508,854,306 events reconciled). Checkpoints and full scores are shared outside Git. See [the sequence detector guide](docs/sequence_detector.md), [the downstream handoff](docs/sequence_detector_handoff.md), and the [sequence](data/manifests/lanl_sequences_v1.json) and [selection](data/manifests/sequence_detector_v1.json) manifests.
+- **Data (2.1–2.5):** Days 1–30 of LANL authentication, 508,854,306 events and 749 red-team label rows, normalised with exact reconciliation; chronological split into training (Days 1–7), validation (Days 8–16) and test (Days 17–30); shared causal historical features; `auth.txt:<line>` evidence references throughout. See [lanl_ingestion.md](docs/lanl_ingestion.md), [lanl_splits.md](docs/lanl_splits.md), [lanl_features.md](docs/lanl_features.md), [evidence_references.md](docs/evidence_references.md).
+- **Short-term sequence detector (3.1–3.4):** GRU autoencoder over user-hour event sequences, frozen; validation AP 0.0060 (102× prevalence), ROC-AUC 0.88. See [sequence_detector.md](docs/sequence_detector.md) and [sequence_detector_handoff.md](docs/sequence_detector_handoff.md).
+- **Long-term graph detector (4.1–4.4):** graph autoencoder over daily user–computer graphs, plus a separate confirmed-relationship signature layer. Its reported test-period results (GAE F1 0.077; signature layer F1 0.84) are retrospective, because the test days had been inspected during development. See [graph_detector.md](docs/graph_detector.md), [graph_model_evaluation.md](docs/graph_model_evaluation.md), [graph_detector_handoff.md](docs/graph_detector_handoff.md).
+- **Fusion and incidents (5.1–5.4):** alignment, maximum/average/temporal fusion and incident records with signature tagging and evidence.
+- **Evaluation (9.1–9.4):** protocol ([evaluation_protocol.md](docs/evaluation_protocol.md)); comparison of all detectors and fusions on Days 13–16 at the same budget ([model_comparison_matrix.md](docs/model_comparison_matrix.md)); detection timing, precedence and errors with data-driven case studies ([detection_timing_and_errors.md](docs/detection_timing_and_errors.md)); the final model and test ([supervised_fusion.md](docs/supervised_fusion.md), full record in [experiment_features_v2.md](docs/experiment_features_v2.md)). The Isolation Forest baseline (9.2) is implemented but not yet run on LANL.
+- **Not yet in the repository:** the ATT&CK retrieval and LLM investigation component (6.x), the dashboard beyond a mock UI (7.x), end-to-end integration (8.x) and investigation reliability evaluation (9.5).
 
-Task 2.4 shared historical features are implemented. The streaming two-pass pipeline preserves `source_reference` in raw and transformed feature rows. The completed local production run processed and reconciled all 508,854,306 events across Days 1–30. Large generated feature, model, and score artifacts remain outside Git. See [the feature guide](docs/lanl_features.md) and [its manifest](data/manifests/lanl_features_v1.json).
-
-Task 2.5 evidence lookup and provenance helpers are implemented. `AuthenticationEvidenceLookup` resolves accepted `auth.txt:<source_line>` references to normalized events and their retained raw record; carrier helpers attach ordered references to sequence and graph evidence and support paging. The checked-in sample demonstrates end-to-end tracing, but it is synthetic sample data rather than a real detector incident. See [the evidence guide](docs/evidence_references.md).
-
-The chronological data split policy established for Task 2.3, including training compromise exclusions, replay boundaries and evaluation units, is:
-- **Training (Days 1–7, `[1, 604801)`)**: 113,699,496 events. Excludes seven red-team users (`32,659` events, 0.0287%) appearing in training compromise labels, leaving `113,666,837` eligible events (99.9713%) for normal model fitting, learned vocabularies, and scalers. Eligible training events are presumed normal background and are not guaranteed benign.
-- **Validation (Days 8–16, `[604801, 1382401)`)**: 164,299,768 events, 640 label rows / 614 unique labels (600 matched, 14 unmatched). Used for model tuning, threshold selection, and fusion calibration.
-- **Test (Days 17–30, `[1382401, 2592001)`)**: 230,855,042 events, 60 label rows / 52 unique labels. Evaluated strictly using frozen model checkpoints and calibration parameters.
-
-The machine-readable split specification is in [the split configuration](config/lanl_splits.json), the verified totals and provenance are recorded in [the splits manifest](data/manifests/lanl_splits_v1.json), and the developer usage guide is in [the splits documentation](docs/lanl_splits.md).
-
-Task 2.2 normalisation is complete. The selected Days 1–30 source was normalised into 508,854,306 authentication events and 749 separately stored red-team labels, with zero rejected rows and exact count reconciliation. The local result is a 9.48 GiB, day-partitioned Zstandard Parquet dataset ready to share through the team's large-file storage. The event contract, completed-run record and loading example are in [the LANL ingestion guide](docs/lanl_ingestion.md). A small processed sample remains tracked for interface development without the full dataset.
-
-Task 1.1 foundation files are present; independent second-member setup verification has not yet been recorded. For Task 2.1, the inspected LANL authentication source has 1,051,430,459 records across 58 days. The initial source window is Days 1–30, retaining all 749 supplied red-team rows while reducing authentication input to 508,854,306 records. The selection rules, counts and limitations are recorded in [the dataset manifest](data/manifests/lanl_auth_days_01_30.json). Red-team labels remain separate from detector inputs, and authentication records without a matching label are unlabelled rather than proven benign. Full LANL data, trained models, generated outputs and credentials are not stored in Git.
+Large data, feature builds, model checkpoints, scores and logs are not stored in Git; each guide says where they come from or how to rebuild them.
 
 ## Quick smoke check
 

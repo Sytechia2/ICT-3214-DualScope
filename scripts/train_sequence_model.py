@@ -38,6 +38,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-epochs", type=int, default=None)
     parser.add_argument("--torch-threads", type=int, default=None)
     parser.add_argument("--allow-pilot-features", action="store_true")
+    parser.add_argument(
+        "--device", default="cpu",
+        help="Training device, e.g. cuda. Not part of the configuration; CPU and GPU results are close but not bit-identical.",
+    )
     return parser.parse_args()
 
 
@@ -65,7 +69,7 @@ def main() -> int:
     # Matches the run IDs used by select_sequence_model.py so completed runs are reused.
     run_id = args.run_id or f"seq-L{config.policy.max_sequence_length}-{args.model_size or 'default'}"
     train, monitor, stats = prepare_samples(inputs, config, args.cache_dir)
-    manifest = train_trial(inputs, config, train, monitor, stats, args.runs_dir / run_id, run_id)
+    manifest = train_trial(inputs, config, train, monitor, stats, args.runs_dir / run_id, run_id, device=args.device)
     print(
         f"Run {run_id}: {manifest['epochs_run']} epochs in {manifest['training_seconds']}s, "
         f"selected epoch {manifest['selected_epoch']}, reload monitor error "

@@ -3,16 +3,16 @@
 
 Fits the final supervised fusion model (HistGradientBoosting on the GRU score and
 hourly counts) on Days 08-12 with the unchanged code of
-``scripts/experiment_v2_fusion.py`` (branch ``experiment/features-v2``) and
+``scripts/supervised_fusion_validate.py`` and
 writes one row per Days 13-16 user-hour: ``user_id``, ``window_start``, ``score``
 and ``tie_order`` (that experiment's fixed seed-0 order, used to break ties).
 It refuses to write unless it reproduces the experiment's recorded result.
 
-Until ``experiment/features-v2`` is merged, point ``--experiment-root`` at a
-checkout of that branch. Days 17-30 are never read.
+``--experiment-root`` can point at another checkout; by default this one is
+used. Days 17-30 are never read.
 
 Example:
-  python scripts/export_final_model_scores.py --experiment-root ../dualscope-features-v2
+  python scripts/export_final_model_scores.py
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ EXPECTED_TP, EXPECTED_AP = 16, 0.04984
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--experiment-root", type=Path, default=REPO_ROOT,
-                        help="Checkout containing scripts/experiment_v2_fusion.py")
+                        help="Checkout containing scripts/supervised_fusion_validate.py")
     parser.add_argument("--units", type=Path, default=REPO_ROOT / "outputs/experiment_v2/units_A.parquet")
     parser.add_argument("--counts", type=Path, default=REPO_ROOT / "outputs/experiment_v2/fusion_counts.parquet")
     parser.add_argument("--labels-dir", type=Path, default=REPO_ROOT / "data/processed/lanl_auth_days_01_30/redteam_labels/labels")
@@ -41,7 +41,7 @@ def main() -> int:
 
     root = args.experiment_root.resolve()
     sys.path.insert(0, str(root / "src"))
-    spec = importlib.util.spec_from_file_location("experiment_v2_fusion", root / "scripts" / "experiment_v2_fusion.py")
+    spec = importlib.util.spec_from_file_location("supervised_fusion_validate", root / "scripts" / "supervised_fusion_validate.py")
     fusion = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fusion)
     from dualscope.sequence.calibration import load_positive_user_hours, unit_labels
@@ -57,7 +57,7 @@ def main() -> int:
         raise SystemExit(f"unit mismatch: counts {len(counts):,}, GRU {len(gru):,}, joined {len(frame):,}")
     frame["label"] = unit_labels(frame["user"].to_numpy(), frame["hour"].to_numpy(), positives)
     frame["machine"] = fusion._evaluate.is_machine(frame["user"].to_numpy())
-    # Same canonical order and seed-0 shuffle as experiment_v2_fusion.py.
+    # Same canonical order and seed-0 shuffle as supervised_fusion_validate.py.
     frame = frame.sort_values(["day", "user", "hour"], kind="stable").sample(frac=1.0, random_state=0).reset_index(drop=True)
     train = frame[frame["day"].isin(fusion.TRAIN_DAYS)].reset_index(drop=True)
     test = frame[frame["day"].isin(fusion.EVAL_DAYS)].reset_index(drop=True)

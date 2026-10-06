@@ -97,18 +97,22 @@ Model comparison and threshold tuning are governed by the following formal hiera
 
 ---
 
-## 7. Comparative Benchmark Matrix (Task 9.3 Structure)
+## 7. Comparative Benchmark Matrix (Task 9.3 results)
 
-Final experimental reporting will populate the comparative benchmark table on identical validation and test splits:
+All rows use the same user-hours, labels and budget (top 38 user-hours per day). Supervised models are fitted on Days 08–12; Days 13–16 are unseen evaluation days. Only the frozen final model and its comparators were scored on the test days 17–30, once. Full tables: [model_comparison_matrix.md](model_comparison_matrix.md) (Days 13–16) and [supervised_fusion.md](supervised_fusion.md) (final model and test).
 
-| Model Architecture | Task | Timescale | Input Representations | Primary Metric (PR-AUC) | Best F1 | Alert Volume / Day |
+| Model | Task | Timescale | Inputs | Days 13–16: caught at 38/day (of 136) | Days 13–16: AP | Days 17–30: caught (of 39) / AP |
 | :--- | :---: | :---: | :--- | :---: | :---: | :---: |
-| **Flat Isolation Forest** | 9.2 | 1 Hour | 16 tabular aggregated features | *TBD* | *TBD* | *TBD* |
-| **Short-Term GRU Autoencoder** | 3.3 | 1 Hour | Event sequences ($L=32$, 12 features) | 0.00598 | 0.039 | 37.8 |
-| **Long-Term Graph GAE** | 4.3 | 24 Hours | Dynamic bipartite user-computer graph | 0.02640 | 0.077 | 42.1 |
-| **DualScope Fused Engine** | 5.3 / 9.3 | Multi (1h + 24h) | Fused sequence + graph + temporal decay | *TBD* | *TBD* | *TBD* |
+| Flat Isolation Forest | 9.2 | 1 hour | Tabular hourly aggregates | not yet run on LANL | – | – |
+| Short-term GRU autoencoder | 3.3 | 1 hour | Event sequences (L = 32) | 4 | 0.0046 | 0 / 0.00020 |
+| Long-term graph GAE | 4.3 | 24 hours | Bipartite user–computer graph | 1 | 0.0019 | not scored here¹ |
+| Average fusion | 5.2 | 1 h + 24 h | GRU + graph scores | 8 | 0.0123 | – |
+| Temporal fusion | 5.3 | 1 h + 24 h | Average + co-alert boost | 8 | 0.0141 | – |
+| Supervised fusion, logistic regression | 9.3 | 1 h + 24 h | GRU + graph + temporal features | 10 | 0.0167 | – |
+| **Final: supervised fusion, gradient boosting** | 9.3 | 1 hour | GRU + hourly authentication counts | **16 (13–18)²** | **0.050** | **1 / 0.00124** |
 
----
+¹ The graph detector's own report gives test-period results (AP 0.0264, F1 0.077), but its test days had already been inspected during development, so they are retrospective, not a held-out estimate.
+² Range over ten refits with 0.03% noise on the GRU score (numeric stability check, validation days only).
 
 ## 8. GenAI Investigation Review Rubric (Task 9.5)
 

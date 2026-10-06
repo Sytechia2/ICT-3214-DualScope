@@ -53,7 +53,7 @@ class HistoricalFeatureEngine:
     - User 1h sliding window (prior auth count, prior failure count)
     - User 24h sliding window (prior unique destinations, prior user-destination count)
     - User previous authentication timestamp (seconds since previous auth, has history)
-    - Ever-seen sets of (user, destination) and (source_host, destination_host)
+    - Ever-seen sets of (user, destination), (user, source_host) and (source_host, destination_host)
     - Active timeline sweeper to purge memory of inactive users
     """
 
@@ -75,6 +75,9 @@ class HistoricalFeatureEngine:
         # Ever-seen relationship sets (packed 64-bit integers: (id1 << 32) | id2)
         self.seen_user_destinations: set[int] = set()
         self.seen_host_connections: set[int] = set()
+        self.seen_user_sources: set[int] = set()
+        # Per-user flag: account name (before '@') ends with '$' (a machine account)
+        self._user_is_machine: dict[int, bool] = {}
 
         # Last observed timestamp per user (stored permanently for gap calculation)
         self.user_last_auth: dict[int, int] = {}
@@ -173,6 +176,8 @@ class HistoricalFeatureEngine:
         out_prior_user_dest_count_24h = [0] * n_rows
         out_is_new_user_dest = [False] * n_rows
         out_is_new_host_conn = [False] * n_rows
+        out_is_new_user_src = [False] * n_rows
+        out_is_machine = [False] * n_rows
         out_history_complete_1h = [False] * n_rows
         out_history_complete_24h = [False] * n_rows
 
@@ -256,9 +261,17 @@ class HistoricalFeatureEngine:
             # Relationship novelty (packed 64-bit int keys)
             user_dest_key = (uid << 32) | dc_id
             host_conn_key = (sc_id << 32) | dc_id
+            user_src_key = (uid << 32) | sc_id
 
             out_is_new_user_dest[i] = (user_dest_key not in self.seen_user_destinations)
             out_is_new_host_conn[i] = (host_conn_key not in self.seen_host_connections)
+            out_is_new_user_src[i] = (user_src_key not in self.seen_user_sources)
+
+            is_machine = self._user_is_machine.get(uid)
+            if is_machine is None:
+                is_machine = user.split("@", 1)[0].endswith("$")
+                self._user_is_machine[uid] = is_machine
+            out_is_machine[i] = is_machine
 
             out_history_complete_1h[i] = (t >= ds_start + w1)
             out_history_complete_24h[i] = (t >= ds_start + w24)
@@ -277,6 +290,7 @@ class HistoricalFeatureEngine:
             self.user_last_auth[uid] = t
             self.seen_user_destinations.add(user_dest_key)
             self.seen_host_connections.add(host_conn_key)
+            self.seen_user_sources.add(user_src_key)
 
             if self._user_last_timeline_ts.get(uid) != t:
                 self._user_last_timeline_ts[uid] = t
@@ -306,6 +320,8 @@ class HistoricalFeatureEngine:
             "prior_user_destination_count_24h": pa.array(out_prior_user_dest_count_24h, type=pa.int64()),
             "is_new_user_destination": pa.array(out_is_new_user_dest, type=pa.bool_()),
             "is_new_host_connection": pa.array(out_is_new_host_conn, type=pa.bool_()),
+            "is_new_user_source": pa.array(out_is_new_user_src, type=pa.bool_()),
+            "is_machine_account": pa.array(out_is_machine, type=pa.bool_()),
             "history_complete_1h": pa.array(out_history_complete_1h, type=pa.bool_()),
             "history_complete_24h": pa.array(out_history_complete_24h, type=pa.bool_()),
             "dataset_day": batch["dataset_day"],
@@ -339,11 +355,12 @@ class HistoricalFeatureEngine:
         # 2. Ever-seen relationship sets
         seen_user_dst_mem = sys.getsizeof(self.seen_user_destinations)
         seen_host_conn_mem = sys.getsizeof(self.seen_host_connections)
-        ever_seen_mem = seen_user_dst_mem + seen_host_conn_mem
+        seen_user_src_mem = sys.getsizeof(self.seen_user_sources)
+        ever_seen_mem = seen_user_dst_mem + seen_host_conn_mem + seen_user_src_mem
 
         # 3. Entity tables and user last auth
         entity_mem = sys.getsizeof(self._user_to_id) + sys.getsizeof(self._comp_to_id)
-        entity_mem += sys.getsizeof(self.user_last_auth)
+        entity_mem += sys.getsizeof(self.user_last_auth) + sys.getsizeof(self._user_is_machine)
 
         total_internal_bytes = rolling_mem + ever_seen_mem + entity_mem
 
@@ -367,6 +384,7 @@ class HistoricalFeatureEngine:
             "rolling_history_memory_mb": round(rolling_mem / (1024 * 1024), 3),
             "distinct_user_destinations_ever_seen": len(self.seen_user_destinations),
             "distinct_host_connections_ever_seen": len(self.seen_host_connections),
+            "distinct_user_sources_ever_seen": len(self.seen_user_sources),
             "ever_seen_sets_memory_mb": round(ever_seen_mem / (1024 * 1024), 3),
             "entity_tables_memory_mb": round(entity_mem / (1024 * 1024), 3),
             "total_internal_state_memory_mb": round(total_internal_bytes / (1024 * 1024), 3),

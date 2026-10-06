@@ -72,7 +72,7 @@ Every row carries `model_version`. A retrained or re-exported detector gets a ne
 - **Unit:** `(acting_user, hour_start)`. Positive if any deduplicated red-team label (label `user` = source user) falls in the hour. Positives without authentication events cannot be scored; they are reported as `positive_coverage` and `recall_including_unscored_positives`.
 - **Training:** eligible train user-hours on days 2–7. Hours touching the 7 training-excluded users are dropped whole, and day 1 is warm-up.
 - **Tuning:** model settings, aggregation, calibration and threshold were chosen on validation days 8–16 only.
-- **Test scores:** test days 17–30 were scored once with the frozen detector. **No test labels were read** and no test metrics were computed by Member 2, so the test split is untouched for 9.3.
+- **Test scores:** test days 17–30 were scored once with the frozen detector. **No test labels were read** and no test metrics were computed by Member 2. The test days have since been used once, for the final test of the supervised fusion model ([supervised_fusion.md](supervised_fusion.md)), which also reports the GRU's test result (0 of 39 attack hours at 38 alerts/day, AP 0.00020).
 - **Cohort:** detector coverage is every hour with events from day 2 on. For a common eligible cohort with the graph detector, both start after the same 24-hour warm-up.
 - **PR-AUC:** "average precision" in the manifest is scikit-learn's step-wise average precision.
 

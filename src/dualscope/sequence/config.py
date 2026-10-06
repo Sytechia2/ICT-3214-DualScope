@@ -48,8 +48,18 @@ class SequencePolicy:
     max_sequence_length: int = 64
     min_events: int = 1
     require_complete_24h_history: bool = True
+    # Optional binary Task 2.4 columns appended after the default binary inputs
+    # (for example the v2 features). Omitted from to_dict when empty, so default
+    # configurations keep their existing fingerprints.
+    extra_binary_inputs: tuple[str, ...] = ()
+
+    @property
+    def binary_inputs(self) -> tuple[str, ...]:
+        return SEQUENCE_BINARY_INPUTS + tuple(self.extra_binary_inputs)
 
     def validate(self) -> None:
+        if len(set(self.binary_inputs)) != len(self.binary_inputs):
+            raise ValueError("extra_binary_inputs must be distinct from each other and the default binary inputs")
         if self.hour_seconds <= 0:
             raise ValueError("hour_seconds must be positive")
         if self.max_sequence_length < 2:
@@ -159,7 +169,12 @@ class SequenceDetectorConfig:
             raise ValueError("top_events and top_features must be positive")
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        if data["policy"]["extra_binary_inputs"]:
+            data["policy"]["extra_binary_inputs"] = list(data["policy"]["extra_binary_inputs"])
+        else:
+            del data["policy"]["extra_binary_inputs"]
+        return data
 
     def fingerprint(self) -> str:
         canonical = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
@@ -188,8 +203,11 @@ class SequenceDetectorConfig:
         unknown_top = set(data) - known_top - {"description"}
         if unknown_top:
             raise ValueError(f"unknown sequence config fields: {sorted(unknown_top)}")
+        policy = dict(data.get("policy") or {})
+        if "extra_binary_inputs" in policy:
+            policy["extra_binary_inputs"] = tuple(str(name) for name in policy["extra_binary_inputs"])
         return cls(
-            policy=build(SequencePolicy, data.get("policy")),
+            policy=build(SequencePolicy, policy),
             model=build(ModelSettings, data.get("model")),
             training=build(TrainingSettings, data.get("training")),
             search=build(SearchSpace, data.get("search")),
@@ -203,6 +221,7 @@ class SequenceDetectorConfig:
         return cls.from_dict(json.loads(Path(path).read_text(encoding="utf-8")))
 
 
-def input_feature_names() -> list[str]:
+def input_feature_names(policy: SequencePolicy | None = None) -> list[str]:
     """Per-event input names in the order used by model arrays and evidence."""
-    return list(SEQUENCE_NUMERIC_INPUTS) + list(SEQUENCE_BINARY_INPUTS) + list(SEQUENCE_CATEGORICAL_INPUTS)
+    binary = policy.binary_inputs if policy is not None else SEQUENCE_BINARY_INPUTS
+    return list(SEQUENCE_NUMERIC_INPUTS) + list(binary) + list(SEQUENCE_CATEGORICAL_INPUTS)

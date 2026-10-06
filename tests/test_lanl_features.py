@@ -1030,3 +1030,80 @@ def test_preprocessor_verify_compatibility(tmp_path: Path) -> None:
     unverified_split = FeaturePreprocessor.load(no_split_fp_file)
     with pytest.raises(ValueError, match="Missing 'split_policy_fingerprint'"):
         unverified_split.verify_compatibility(splits_cfg=splits_cfg)
+
+
+def test_user_source_novelty_on_hand_calculated_fixture() -> None:
+    """(acting_user, source_computer) novelty is cumulative and computed before the state update."""
+    engine = HistoricalFeatureEngine(FeatureConfig.default())
+    raw_batch = engine.process_batch(make_sample_raw_batch(make_7_event_hand_calculated_rows()))
+
+    # Lines 1-7: (U1,C1) new, (U1,C1), (U1,C1), (U2,C2) new, (U1,C3) new, (U1,C1), (U1,C1)
+    assert raw_batch["is_new_user_source"].to_pylist() == [True, False, False, True, True, False, False]
+    assert raw_batch["is_machine_account"].to_pylist() == [False] * 7
+    assert engine.get_memory_breakdown()["distinct_user_sources_ever_seen"] == 3
+
+
+def test_user_source_novelty_is_per_user_and_directed() -> None:
+    """A source computer seen for one user is still new for another user, and destinations do not count."""
+    base = {
+        "destination_user": "U1", "authentication_type": "NTLM", "logon_type": "Network",
+        "authentication_orientation": "LogOn", "authentication_result": "Success",
+        "exact_duplicate_ordinal": 1, "dataset_day": 1,
+    }
+    rows = [
+        {**base, "timestamp": 1, "source_line": 1, "acting_user": "U1", "source_user": "U1",
+         "source_computer": "C1", "destination_computer": "C2"},
+        # U2 from C1: new for U2 even though U1 used C1.
+        {**base, "timestamp": 2, "source_line": 2, "acting_user": "U2", "source_user": "U2",
+         "source_computer": "C1", "destination_computer": "C2"},
+        # U1 from C2: C2 was only a destination for U1, so it is a new source.
+        {**base, "timestamp": 3, "source_line": 3, "acting_user": "U1", "source_user": "U1",
+         "source_computer": "C2", "destination_computer": "C1"},
+        {**base, "timestamp": 4, "source_line": 4, "acting_user": "U1", "source_user": "U1",
+         "source_computer": "C2", "destination_computer": "C3"},
+    ]
+    for row in rows:
+        row["source_reference"] = f"auth.txt:{row['source_line']}"
+    raw_batch = HistoricalFeatureEngine(FeatureConfig.default()).process_batch(make_sample_raw_batch(rows))
+    assert raw_batch["is_new_user_source"].to_pylist() == [True, True, True, False]
+
+
+@pytest.mark.parametrize(
+    ("acting_user", "expected"),
+    [
+        ("C5857$@DOM1", True),
+        ("U66@DOM1", False),
+        ("ANONYMOUS LOGON@C586", False),
+        ("SYSTEM$", True),
+        ("U$X@DOM1", False),
+    ],
+)
+def test_machine_account_flag(acting_user: str, expected: bool) -> None:
+    """Machine accounts are those whose account name (before '@') ends with '$'."""
+    row = {
+        "timestamp": 1, "source_line": 1, "source_reference": "auth.txt:1", "acting_user": acting_user,
+        "source_user": acting_user, "destination_user": acting_user, "source_computer": "C1",
+        "destination_computer": "C1", "authentication_type": "Kerberos", "logon_type": "Network",
+        "authentication_orientation": "LogOn", "authentication_result": "Success",
+        "exact_duplicate_ordinal": 1, "dataset_day": 1,
+    }
+    raw_batch = HistoricalFeatureEngine(FeatureConfig.default()).process_batch(make_sample_raw_batch([row]))
+    assert raw_batch["is_machine_account"].to_pylist() == [expected]
+
+
+def test_v2_binary_inputs_are_transformed() -> None:
+    """The v2 config lists both new flags as model inputs, and the transform casts them to 0/1."""
+    v2 = FeatureConfig.from_file(Path(__file__).resolve().parents[1] / "config" / "lanl_features_v2.json")
+    v1 = FeatureConfig.from_file(Path(__file__).resolve().parents[1] / "config" / "lanl_features.json")
+    assert v2.model_inputs_binary == v1.model_inputs_binary + ["is_new_user_source", "is_machine_account"]
+    assert v2.fingerprint() != v1.fingerprint()
+
+    engine = HistoricalFeatureEngine(v2)
+    raw_batch = engine.process_batch(make_sample_raw_batch(make_7_event_hand_calculated_rows()))
+    preprocessor = FeaturePreprocessor(v2, split_policy_fingerprint="test_fp", mode="test", is_production=False)
+    preprocessor.accumulate_training_batch(raw_batch, pa.array([True] * len(raw_batch)))
+    preprocessor.freeze()
+    transformed = preprocessor.transform_batch(raw_batch)
+    assert transformed.schema == TRANSFORMED_FEATURE_SCHEMA
+    assert transformed["is_new_user_source"].to_pylist() == [1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0]
+    assert transformed["is_machine_account"].to_pylist() == [0.0] * 7

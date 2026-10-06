@@ -129,8 +129,13 @@ def prepare_samples(
     settings = config.training
     length = config.policy.max_sequence_length
     key = f"L{length}_n{settings.train_sequences}_m{settings.monitor_sequences}_c{settings.max_chunks_per_user_hour}_s{settings.seed}"
+    if config.policy.extra_binary_inputs:
+        key += f"_x{len(config.policy.extra_binary_inputs)}"
     cache = Path(cache_dir) / f"samples_{key}.npz" if cache_dir else None
     fingerprint = f"{inputs.feature_info()['preprocessing_sha256']}:{inputs.split_cfg.fingerprint()}:{','.join(inputs.excluded_users)}"
+    if config.policy.extra_binary_inputs:
+        # Samples hold the model input columns, so a different input list needs its own sample.
+        fingerprint += f":binary={','.join(config.policy.binary_inputs)}"
     if cache is not None and cache.is_file():
         stored = np.load(cache, allow_pickle=False)
         if str(stored["fingerprint"]) == fingerprint:
@@ -183,6 +188,7 @@ def train_trial(
     run_dir: str | Path,
     run_id: str,
     log: Callable[[str], None] = print,
+    device: str = "cpu",
 ) -> dict[str, Any]:
     """Train one configuration and save checkpoint, config, log and run manifest."""
     from dualscope.sequence.model import ModelSpec
@@ -194,13 +200,13 @@ def train_trial(
         save_checkpoint,
         train_autoencoder,
     )
-    from dualscope.sequence.config import SEQUENCE_BINARY_INPUTS, SEQUENCE_NUMERIC_INPUTS
+    from dualscope.sequence.config import SEQUENCE_NUMERIC_INPUTS
 
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "config.json").write_text(json.dumps(config.to_dict(), indent=2), encoding="utf-8")
     spec = ModelSpec.from_settings(
-        config.model, len(SEQUENCE_NUMERIC_INPUTS), len(SEQUENCE_BINARY_INPUTS), categorical_cardinalities(inputs.preprocessing)
+        config.model, len(SEQUENCE_NUMERIC_INPUTS), len(config.policy.binary_inputs), categorical_cardinalities(inputs.preprocessing)
     )
     log_path = run_dir / "training_log.jsonl"
     log_path.write_text("", encoding="utf-8")
@@ -211,7 +217,7 @@ def train_trial(
         log(f"  epoch {entry['epoch']}: train={entry['train_loss']:.5f} monitor={entry['monitor_loss']:.5f} ({entry['epoch_seconds']}s)")
 
     started = time.time()
-    model, history = train_autoencoder(spec, train, monitor, config.training, log=record)
+    model, history = train_autoencoder(spec, train, monitor, config.training, log=record, device=device)
     duration = time.time() - started
     metadata = {
         "run_id": run_id,
@@ -251,7 +257,7 @@ def train_trial(
             "mean_reconstruction_error": reload_loss,
             "finite": True,
         },
-        "environment": runtime_environment(),
+        "environment": {**runtime_environment(), "training_device": device},
         "labels_used": False,
     }
     (run_dir / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

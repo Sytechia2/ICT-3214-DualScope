@@ -168,11 +168,11 @@ def categorical_cardinalities(preprocessing: dict[str, Any]) -> tuple[int, ...]:
     return tuple(sizes)
 
 
-def _to_tensors(dense: np.ndarray, categorical: np.ndarray, mask: np.ndarray):
+def _to_tensors(dense: np.ndarray, categorical: np.ndarray, mask: np.ndarray, device: torch.device | str = "cpu"):
     return (
-        torch.from_numpy(dense),
-        torch.from_numpy(categorical),
-        torch.from_numpy(mask.sum(axis=1).astype(np.int64)),
+        torch.from_numpy(dense).to(device),
+        torch.from_numpy(categorical).to(device),
+        torch.from_numpy(mask.sum(axis=1).astype(np.int64)).to(device),
     )
 
 
@@ -193,14 +193,32 @@ def _length_bucketed_batches(lengths: np.ndarray, batch_size: int, rng: np.rando
 def mean_reconstruction_loss(model: GRUSequenceAutoencoder, sample: SequenceSample, batch_size: int = 2048) -> float:
     """Event-weighted mean reconstruction error over a sample (no weight updates)."""
     model.eval()
+    device = next(model.parameters()).device
     order = np.argsort(sample.lengths, kind="stable")
     total, events = 0.0, 0
     for begin in range(0, len(order), batch_size):
         idx = order[begin : begin + batch_size]
         dense, cat, mask = gather_padded(sample.dense, sample.categorical, sample.starts[idx], sample.lengths[idx])
-        d, c, lengths = _to_tensors(dense, cat, mask)
+        d, c, lengths = _to_tensors(dense, cat, mask, device)
         errors = per_feature_errors(model, d, c, lengths)
         total += float(errors.mean(dim=-1).sum())
+        events += int(lengths.sum())
+    return total / max(events, 1)
+
+
+@torch.no_grad()
+def mean_feature_errors(model: GRUSequenceAutoencoder, sample: SequenceSample, batch_size: int = 2048) -> np.ndarray:
+    """Mean per-feature reconstruction loss over a sample's events (no weight updates)."""
+    model.eval()
+    device = next(model.parameters()).device
+    order = np.argsort(sample.lengths, kind="stable")
+    total = np.zeros(model.spec.n_features, dtype=np.float64)
+    events = 0
+    for begin in range(0, len(order), batch_size):
+        idx = order[begin : begin + batch_size]
+        dense, cat, mask = gather_padded(sample.dense, sample.categorical, sample.starts[idx], sample.lengths[idx])
+        d, c, lengths = _to_tensors(dense, cat, mask, device)
+        total += per_feature_errors(model, d, c, lengths).sum(dim=(0, 1)).double().cpu().numpy()
         events += int(lengths.sum())
     return total / max(events, 1)
 
@@ -211,15 +229,20 @@ def train_autoencoder(
     monitor: SequenceSample,
     settings: TrainingSettings,
     log: Callable[[dict[str, Any]], None] | None = None,
+    device: torch.device | str = "cpu",
 ) -> tuple[GRUSequenceAutoencoder, list[dict[str, Any]]]:
-    """Fit the autoencoder and return the epoch with the lowest monitor loss."""
+    """Fit the autoencoder and return the epoch with the lowest monitor loss.
+
+    ``device`` only selects where training runs (``"cuda"`` is faster but not
+    bit-identical to CPU); the returned model is always on the CPU.
+    """
     if len(train) == 0:
         raise ValueError("no training sequences")
     if settings.torch_threads > 0:
         torch.set_num_threads(settings.torch_threads)
     torch.manual_seed(settings.seed)
     rng = np.random.default_rng(settings.seed)
-    model = GRUSequenceAutoencoder(spec)
+    model = GRUSequenceAutoencoder(spec).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=settings.learning_rate)
 
     history: list[dict[str, Any]] = []
@@ -231,7 +254,7 @@ def train_autoencoder(
         running, events = 0.0, 0
         for batch in _length_bucketed_batches(train.lengths, settings.batch_size, rng):
             dense, cat, mask = gather_padded(train.dense, train.categorical, train.starts[batch], train.lengths[batch])
-            d, c, lengths = _to_tensors(dense, cat, mask)
+            d, c, lengths = _to_tensors(dense, cat, mask, device)
             loss = masked_sequence_loss(per_feature_errors(model, d, c, lengths), lengths)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -257,12 +280,13 @@ def train_autoencoder(
             log(record)
         if monitor_loss < best_loss - 1e-6:
             best_loss, best_epoch, stale = monitor_loss, epoch, 0
-            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+            best_state = {k: v.detach().to("cpu", copy=True) for k, v in model.state_dict().items()}
         else:
             stale += 1
             if stale >= settings.early_stopping_patience:
                 break
     assert best_state is not None
+    model = model.to("cpu")
     model.load_state_dict(best_state)
     model.eval()
     for record in history:
