@@ -10,3 +10,6 @@ pytest>=8,<9
 # Sequence detector (Tasks 3.1-3.4): GRU autoencoder training and inference.
 # CPU wheels are sufficient; see docs/sequence_detector.md for install notes.
 torch>=2.4,<3
+
+# Task 7.1 analyst incident navigation.
+streamlit>=1.55,<2
