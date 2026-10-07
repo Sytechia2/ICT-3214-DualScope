@@ -58,7 +58,7 @@ INSTRUCTIONS = [
     "If nothing fits, use one row with judgement 'No supported mapping' and leave technique_id empty.",
     "evidence_refs = semicolon-separated auth.txt references, e.g. auth.txt:123;auth.txt:456.",
     "Prefer the parent technique when the sub-technique cannot be told from logon records.",
-    "Reviewers A and B then compare and write labels_consensus.xlsx: resolve disagreements, or keep them as Uncertain with a note.",
+    "The final labels go in labels_consensus.xlsx, the file the scores use.",
 ]
 
 STYLE = """body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;color:#222;margin:16px auto;max-width:1200px;padding:0 16px}

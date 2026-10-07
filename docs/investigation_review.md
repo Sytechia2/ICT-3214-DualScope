@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Two reviewers write the ATT&CK techniques that the evidence supports for 25 incidents. They do this **before seeing any LLM output**. Later, the three investigation modes (`direct`, `rag`, `rag_verified`; Tasks 6.2-6.4) are scored against the agreed labels.
+Reference ATT&CK techniques that the evidence supports are labelled for 25 incidents **before any LLM output is seen**. The three investigation modes (`direct`, `rag`, `rag_verified`; Tasks 6.2-6.4) are then scored against these labels.
 
 ## The sample
 
@@ -25,9 +25,9 @@ Behaviour rows overlap (an incident can match several). The table is printed by 
 
 ## Rules for reviewers
 
-1. Label each incident **independently**, before you see any LLM output and before you open the dashboard's Investigation tab.
+1. Label each incident before you see any LLM output and before you open the dashboard's Investigation tab.
 2. Use only the incident sheet (`incidents/<incident_id>.html`, open `index.html` first) and <https://attack.mitre.org/>. The sheet shows exactly what the LLM sees.
-3. Fill `labels_reviewer_A.xlsx` (or `_B`). The sheet `labels` has one pre-filled row per incident. For each technique write one row (copy the `incident_id` for extra rows):
+3. Fill a label workbook (`labels_reviewer_A.xlsx`). The sheet `labels` has one pre-filled row per incident. For each technique write one row (copy the `incident_id` for extra rows):
    - `technique_id`, in the form `T####` or `T####.###`. Prefer the parent technique when the sub-technique cannot be told from logon records.
    - `judgement`:
      - **Supported**: the cited events show the behaviour the technique describes. This means consistent with it, not proof of intent.
@@ -35,7 +35,7 @@ Behaviour rows overlap (an incident can match several). The table is printed by 
      - **No supported mapping**: use one row with an empty `technique_id` if nothing fits.
    - `evidence_refs`: the `auth.txt:N` references, separated by semicolons.
    - `notes`: anything that explains the choice.
-4. When both are done, A and B compare. They write `labels_consensus.xlsx` (same layout, reviewer `consensus`). Disagreements are either resolved or kept as `Uncertain` with a note saying why.
+4. The final labels go in `labels_consensus.xlsx` (same layout, reviewer `consensus`); this is the file the scores use.
 
 ## How the labels are used
 
@@ -54,7 +54,7 @@ The first writes the committed sample file. The second writes the pack to `outpu
 
 TODO (Peter): how the reference labels were produced.
 
-The 25 consensus labels hold 8 incidents with an Uncertain technique (T1021 x5, T1078 x2, T1110 x1) and 17 with no supported mapping. There are 0 Supported labels. The labels were recorded before scoring. Reviewer A and reviewer B agreed on any mapping vs none for 19 of 25 incidents (76%). The 6 disagreements were resolved in the consensus.
+The 25 consensus labels hold 8 incidents with an Uncertain technique (T1021 x5, T1078 x2, T1110 x1) and 17 with no supported mapping. There are 0 Supported labels. The labels were recorded before scoring.
 
 Scores are in `outputs/evaluation/investigation_scores_v1/` (`report.md`, `scores.json`, `per_incident.csv`). Rates are numerator/denominator.
 
@@ -86,9 +86,9 @@ Scores are in `outputs/evaluation/investigation_scores_v1/` (`report.md`, `score
 | Correctly removed (parent not Supported) | n/a (0/0) |
 | Supported mappings wrongly removed | n/a (0/0) |
 
-Kept techniques: verifier status against reviewer judgement (exact ID).
+Kept techniques: verifier status against the reference label (exact ID).
 
-| Verifier / Reviewer | Supported | Uncertain | No label |
+| Verifier / Reference | Supported | Uncertain | No label |
 | --- | --- | --- | --- |
 | Supported | 0 | 2 | 14 |
 | Uncertain | 0 | 1 | 5 |
@@ -105,7 +105,7 @@ Kept techniques: verifier status against reviewer judgement (exact ID).
 ### Reproduce
 
 ```
-python scripts/evaluate_investigations.py --reviewer-labels <A> <B>
+python scripts/evaluate_investigations.py
 ```
 
-`<A>` and `<B>` are the two reviewer label files. The other options use their defaults. Output goes to `outputs/evaluation/investigation_scores_v1/` (not committed).
+All options use their defaults. Output goes to `outputs/evaluation/investigation_scores_v1/` (not committed).
