@@ -9,6 +9,7 @@ summary strip and field table); colours and fonts are in .streamlit/config.toml.
 
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from html import escape
@@ -45,6 +46,7 @@ from dualscope.dashboard.queue import (
     IncidentSummary,
     behaviour_totals,
     day_cutoff_counts,
+    matches_rule,
     matches_search,
     summarise_incidents,
 )
@@ -55,7 +57,8 @@ HANDOFF_SOURCE = "Alert package (days 17–30)"
 FIXTURE_SOURCE = "Synthetic fixture"
 OTHER_SOURCE = "Other JSONL export"
 QUEUE_SIZE = 38
-TAB_LABELS = ("Overview", "Timeline", "Hosts", "Evidence", "Investigation")
+TAB_LABELS = ("Overview", "Timeline", "Connections", "Model details", "Investigation")
+TAB_ALIASES = {"Evidence": "Model details", "Hosts": "Connections"}  # older deep links
 _BASE = datetime(2000, 1, 1)  # charts need a date; only the time of day is shown
 
 
@@ -107,7 +110,7 @@ def _source_controls() -> tuple[str, Path | None]:
 def _workspace() -> Workspace | None:
     source, path = st.session_state["_source"]
     if path is None:
-        st.info("Enter the path of a saved incidents .jsonl file under **Data source** in the sidebar.")
+        st.info("Set an incidents .jsonl path under **Data source**.")
         return None
     events_file = events_path_for(path)
     try:
@@ -124,10 +127,10 @@ def _workspace() -> Workspace | None:
 
 def _provenance(ws: Workspace) -> str:
     if ws.source == FIXTURE_SOURCE:
-        return "Synthetic fixture — demonstration incidents, not detector results"
+        return "Synthetic fixture · demo data"
     if ws.is_package:
-        return f"Final model · test days 17–30 · {QUEUE_SIZE} alerts per day · saved package, not a live feed"
-    return f"Saved incident export {ws.path.name} · not a live feed"
+        return f"Final model · Test days 17–30 · {QUEUE_SIZE} alerts/day · Offline package"
+    return f"{ws.path.name} · Offline export"
 
 
 def _events_of(ws: Workspace, summary: IncidentSummary) -> pd.DataFrame:
@@ -148,6 +151,12 @@ def _clock(seconds: int) -> str:
     return format_dataset_second(seconds).split()[-1][:-3]
 
 
+def _request_tab(tab: str) -> None:
+    """Open ``tab`` on the incident page at its next render (a fresh tabs widget picks up the default)."""
+    st.session_state["incident_tab"] = tab
+    st.session_state["tab_request"] = st.session_state.get("tab_request", 0) + 1
+
+
 def _select(incident_id: str) -> None:
     st.session_state["selected_incident_id"] = incident_id
     st.session_state["queue_nonce"] = st.session_state.get("queue_nonce", 0) + 1
@@ -156,15 +165,52 @@ def _select(incident_id: str) -> None:
 # ─── Shared pieces ─────────────────────────────────────────────────────
 
 
-def _badges(summary: IncidentSummary, *, extra: list[str] | None = None) -> str:
+def _badges(summary: IncidentSummary) -> str:
+    """Priority badge, plus the answer-key badge when that is switched on."""
     parts = [ui.priority_badge(summary.incident.priority)]
-    if summary.rank is not None:
-        parts.append(ui.badge(f"Rank {summary.rank} of {QUEUE_SIZE}"))
-        parts.append(ui.badge("Above cut-off" if summary.above_cutoff else "Tied at cut-off"))
-    parts.extend(extra or [])
     if st.session_state.get("show_answer_key") and summary.redteam is not None:
         parts.append(ui.badge("Red-team activity" if summary.redteam else "Not red-team", "answer"))
     return "".join(parts)
+
+
+def _rank_text(summary: IncidentSummary) -> str | None:
+    """Rank only means something for HIGH; MEDIUM incidents were tied at the cut-off."""
+    if summary.rank is None:
+        return None
+    if not summary.above_cutoff:
+        return "Tied at cut-off"
+    return f"Rank {summary.rank} of {QUEUE_SIZE} · above cut-off"
+
+
+def _first_time_counts(rows: pd.DataFrame) -> tuple[int, int]:
+    """First-time connections (source → destination pairs) and how many of them used NTLM."""
+    if rows.empty:
+        return 0, 0
+    pairs = host_pair_table(rows)
+    new = pairs[pairs[["New destination for user", "New host pair", "New source for user"]].any(axis=1)]
+    return len(new), int(new["Auth types"].str.contains("NTLM").sum())
+
+
+def _fact_line(summary: IncidentSummary, rows: pd.DataFrame, *, full: bool) -> str:
+    """One line of counts taken from the data. ``full`` adds rank and computers (incident page)."""
+    first, ntlm = _first_time_counts(rows)
+    connections = f"{first} first-time connection{'s' if first != 1 else ''}"
+    parts = []
+    if full:
+        if summary.rank is not None:
+            parts.append(f"Rank {summary.rank} of {QUEUE_SIZE}" if summary.above_cutoff else "tied at cut-off")
+        parts += [_hour_range(summary), f"{summary.event_count} log lines"]
+        if not rows.empty:
+            parts.append(f"{_host_counts(rows)[0]} computers")
+        if first:
+            parts.append(connections + (f" ({ntlm} over NTLM)" if ntlm else ""))
+    else:
+        if first:
+            parts.append(connections)
+            if ntlm:
+                parts.append(f"{ntlm} over NTLM")
+        parts += [f"{summary.event_count} log lines", _hour_range(summary)]
+    return " · ".join(p for p in parts if p)
 
 
 def _first_event_line(ws: Workspace, reference: str) -> str:
@@ -186,10 +232,10 @@ def _example_events(summary: IncidentSummary) -> list[str]:
 
 def _reasons_html(ws: Workspace, summary: IncidentSummary) -> str:
     if not summary.events_available:
-        return "<div class='ds-reason ds-muted'>Event details are not available for this source.</div>"
+        return "<div class='ds-reason ds-muted'>No event data for this source.</div>"
     if not summary.behaviours:
-        return ("<div class='ds-reason'><b>No single event matched a behaviour rule.</b><br>"
-                "<span class='ds-muted'>The model ranked this hour on its overall pattern; there is no event to cite.</span></div>")
+        return ("<div class='ds-reason'><b>No rule matched</b><br>"
+                "<span class='ds-muted'>Ranked on overall activity</span></div>")
     items = []
     for behaviour, example in zip(summary.ordered_behaviours, _example_events(summary)):
         count = behaviour["event_count"]
@@ -202,10 +248,10 @@ def _reasons_html(ws: Workspace, summary: IncidentSummary) -> str:
 
 def _candidates_html(summary: IncidentSummary, limit: int = 3) -> str:
     if not summary.candidates:
-        return "<div class='ds-muted'>None — no behaviour to search with.</div>"
+        return "<div class='ds-muted'>None</div>"
     return "".join(
         f"<div class='ds-candidate'><span>{ui.mono(c['technique_id'])} {escape(c['name'])}</span>"
-        f"{ui.badge('Unverified')}</div>"
+        "</div>"
         for c in summary.candidates[:limit]
     )
 
@@ -221,81 +267,133 @@ def _host_counts(rows: pd.DataFrame) -> tuple[int, int]:
 # ─── Queue page ────────────────────────────────────────────────────────
 
 
+def _pick(key: str, field: str) -> str | None:
+    """The mark clicked in the chart under ``key``, if any."""
+    state = st.session_state.get(key)
+    picked = state.selection.get("pick") if state is not None else None
+    return str(picked[0][field]) if picked else None
+
+
+def _pick_rule(key: str) -> None:
+    """Chart click: filter the queue to that rule; clicking the active rule clears it."""
+    rule = _pick(key, "behaviour")
+    if rule is None:
+        return
+    st.session_state["f_rule"] = None if rule == st.session_state.get("f_rule") else rule
+    st.session_state["rule_nonce"] = st.session_state.get("rule_nonce", 0) + 1  # a fresh chart can be clicked again
+
+
+def _clear_rule() -> None:
+    st.session_state["f_rule"] = None
+    st.session_state["rule_nonce"] = st.session_state.get("rule_nonce", 0) + 1
+
+
+def _pick_day(key: str) -> None:
+    day = _pick(key, "Day")
+    if day is not None:
+        st.session_state["day"] = int(day)
+
+
 def _queue_by_day_chart(counts: pd.DataFrame, day: int) -> alt.Chart:
-    long = counts.melt(id_vars="day", value_vars=["above", "tied"], var_name="status", value_name="alerts")
-    long["status"] = long["status"].map({"above": "Above cut-off", "tied": "Tied"})
-    long["Day"] = long["day"].astype(str)
-    days = counts.assign(Day=counts["day"].astype(str), label=counts["above"].astype(str) + " / " + counts["tied"].astype(str),
-                         total=counts["above"] + counts["tied"])
+    """HIGH hours rise above a zero line in red, MEDIUM hours hang below it in amber."""
+    days = counts.assign(Day=counts["day"].astype(str)).rename(columns={"above": "HIGH", "tied": "MEDIUM"})
+    days["below"] = -days["MEDIUM"]
     order = list(days["Day"])
+    high, low = int(days["HIGH"].max()) + 9, -int(days["MEDIUM"].max()) - 9
+    scale = alt.Scale(domain=[low, high])
     x = alt.X("Day:N", sort=order, scale=alt.Scale(domain=order), title=None,
-              axis=alt.Axis(labelAngle=0, labelFontSize=11, labelColor=ui.INK, labelOverlap=False, labelPadding=6, titleFontSize=13,
-                            titleColor=ui.MUTED, titleFontWeight="normal"))
-    band = (alt.Chart(days[days["day"] == day]).mark_bar(width={"band": 1.0}, color=ui.ACCENT_TINT,
-                                                         cornerRadius=3)
-            .encode(x=x, y=alt.datum(QUEUE_SIZE + 14), y2=alt.datum(0)))
-    bars = alt.Chart(long).mark_bar(width={"band": 0.7}).encode(
-        x=x,
-        y=alt.Y("alerts:Q", title=None, stack=True, scale=alt.Scale(domain=[0, QUEUE_SIZE + 14]),
-                axis=alt.Axis(values=[0, 19, 38], grid=True, gridColor=ui.LINE, labelFontSize=11, labelColor=ui.MUTED)),
-        color=alt.Color("status:N", scale=alt.Scale(domain=["Above cut-off", "Tied"], range=[ui.ACCENT, ui.TIED]),
-                        legend=alt.Legend(orient="top", direction="horizontal", title=None, labelFontSize=12, labelColor=ui.INK, symbolType="square")),
-        order=alt.Order("status:N", sort="ascending"),
-        tooltip=[alt.Tooltip("Day:N", title="Test day"), "status:N", "alerts:Q"],
-    )
-    labels = (alt.Chart(days[days["day"] == day]).mark_text(dy=-7, fontSize=12, fontWeight=600, color=ui.INK)
-              .encode(x=x, y="total:Q", text="label:N"))
-    return (band + bars + labels).properties(height=158).configure_view(stroke=None)
+              axis=alt.Axis(labelAngle=0, labelFontSize=11, labelColor=ui.INK, labelOverlap=False, labelPadding=4, ticks=False,
+                            domain=False))
+    band = (alt.Chart(days[days["day"] == day]).mark_bar(width={"band": 1.0}, color=ui.CHART_BAND, cornerRadius=3)
+            .encode(x=x, y=alt.Y("hi:Q", scale=scale, axis=None), y2="lo:Q")
+            .transform_calculate(hi=str(high), lo=str(low)))
+    up = alt.Chart(days).mark_bar(width={"band": 0.62}, color=ui.HIGH, cursor="pointer").encode(
+        x=x, y=alt.Y("HIGH:Q", scale=scale, axis=None), y2=alt.datum(0))
+    down = alt.Chart(days).mark_bar(width={"band": 0.62}, color=ui.MEDIUM, cursor="pointer").encode(
+        x=x, y=alt.Y("below:Q", scale=scale, axis=None), y2=alt.datum(0))
+    up_text = alt.Chart(days).mark_text(dy=-7, fontSize=11, fontWeight=600, color=ui.INK).encode(
+        x=x, y=alt.Y("HIGH:Q", scale=scale, axis=None), text="HIGH:Q")
+    down_text = alt.Chart(days).mark_text(dy=8, fontSize=11, fontWeight=600, color=ui.INK).encode(
+        x=x, y=alt.Y("below:Q", scale=scale, axis=None), text="MEDIUM:Q")
+    zero = alt.Chart(pd.DataFrame({"zero": [0]})).mark_rule(color="#A3A9B1").encode(y=alt.Y("zero:Q", scale=scale, axis=None))
+    # A full-height invisible bar per day, so a click anywhere in the column picks that day.
+    pick = alt.selection_point(name="pick", fields=["Day"])
+    hit = (alt.Chart(days).mark_bar(width={"band": 1.0}, opacity=0, cursor="pointer").add_params(pick)
+           .encode(x=x, y=alt.Y("hi:Q", scale=scale, axis=None), y2="lo:Q",
+                   tooltip=[alt.Tooltip("Day:N", title="Test day"), "HIGH:Q", "MEDIUM:Q"])
+           .transform_calculate(hi=str(high), lo=str(low)))
+    return (band + up + down + zero + up_text + down_text + hit).properties(height=190).configure_view(stroke=None)
 
 
-def _why_flagged_chart(totals: pd.DataFrame) -> alt.Chart:
+def _why_flagged_chart(totals: pd.DataFrame, total: int, rule: str | None) -> alt.Chart:
+    """Bars for one day's incidents; the x-scale runs to the day's incident total."""
     short = {headline: CHIP_LABELS[key] for key, headline in HEADLINES.items()}
     totals = totals.assign(kind=["none" if b == NO_EVIDENCE else "rule" for b in totals["behaviour"]],
                            behaviour=[short.get(b, b) for b in totals["behaviour"]])
+    totals["label"] = totals["incidents"].astype(str) + f" of {total}"
+    totals["alpha"] = [0.35 if rule and b != rule else 1.0 for b in totals["behaviour"]]
+    pick = alt.selection_point(name="pick", fields=["behaviour"])
+    scale = alt.Scale(domain=[0, max(1, total)])
     base = alt.Chart(totals).encode(
         y=alt.Y("behaviour:N", sort=None, title=None,
                 axis=alt.Axis(labelLimit=160, labelFontSize=12, labelColor=ui.INK, ticks=False, domain=False)),
-        x=alt.X("incidents:Q", title=None, axis=None, scale=alt.Scale(domain=[0, max(1, int(totals["incidents"].max())) * 1.55])),
+        x=alt.X("incidents:Q", title=None, axis=None, scale=scale),
     )
-    bars = base.mark_bar(cornerRadiusEnd=3, height=15).encode(
-        color=alt.Color("kind:N", scale=alt.Scale(domain=["rule", "none"], range=[ui.SHELL, "#B8BEC6"]), legend=None),
-        tooltip=["behaviour:N", "incidents:Q"],
+    # The whole row is clickable, not just the (sometimes tiny) bar.
+    totals["zero"], totals["full"] = 0, max(1, total)
+    hit = (alt.Chart(totals).mark_bar(opacity=0, height=26, cursor="pointer").add_params(pick)
+           .encode(y="behaviour:N", x=alt.X("zero:Q", scale=scale), x2="full:Q",
+                   tooltip=["behaviour:N", alt.Tooltip("label:N", title="incidents")]))
+    bars = base.mark_bar(cornerRadiusEnd=3, height=18, cursor="pointer").encode(
+        color=alt.Color("kind:N", scale=alt.Scale(domain=["rule", "none"], range=[ui.CHART, "#B8BEC6"]), legend=None),
+        opacity=alt.Opacity("alpha:Q", scale=None, legend=None),
     )
-    labels = base.mark_text(align="left", dx=4, fontSize=12, color=ui.INK).encode(text="incidents:Q")
-    return (bars + labels).properties(height=150).configure_view(stroke=None)
+    labels = base.mark_text(align="left", dx=4, fontSize=12, color=ui.INK).encode(text="label:N")
+    return (bars + labels + hit).properties(height=150, padding={"left": 0, "right": 52, "top": 4, "bottom": 4}).configure_view(stroke=None)
+
+
+def _glance_html(day_summaries: list[IncidentSummary]) -> str:
+    high = sum(s.incident.priority in ("HIGH", "CRITICAL") for s in day_summaries)
+    medium = sum(s.incident.priority == "MEDIUM" for s in day_summaries)
+    users = len({s.incident.user_id for s in day_summaries})
+    return (
+        "<div class='ds-glance'>"
+        f"<div class='big'><b>{len(day_summaries)}</b><span>incidents{ui.tip_html('Incident')}</span></div>"
+        f"<div class='row high'><span>HIGH{ui.tip_html('HIGH')}</span><b>{high}</b></div>"
+        f"<div class='row medium'><span>MEDIUM{ui.tip_html('MEDIUM')}</span><b>{medium}</b></div>"
+        + (f"<div class='row'><span>distinct users{ui.tip_html('Distinct users')}</span><b>{users}</b></div>"
+           if users < len(day_summaries) else "")
+        + "</div>"
+    )
 
 
 def _summary_strip(ws: Workspace, day: int, day_summaries: list[IncidentSummary]) -> None:
     counts = day_cutoff_counts(s.incident for s in ws.summaries)
-    left, middle, right = st.columns([1.45, 1.1, 0.55])
-    with left.container(border=True, height=212, key="card_queue_by_day"):
-        st.html("<div class='ds-section'>Queue by test day</div>")
-        if counts.empty:
-            st.caption("The cut-off needs a final-model package; this source has no alert hours.")
-        else:
-            st.altair_chart(_queue_by_day_chart(counts, day), width="stretch")
-    with middle.container(border=True, height=212, key="card_why_flagged"):
-        evidenced = [s for s in ws.summaries if s.events_available]
-        st.html(f"<div class='ds-section'>Why flagged <span class='ds-muted' style='font-weight:400'>· "
-                f"{len(evidenced)} incidents</span></div>")
+    glance, why, days = st.columns([0.62, 1.15, 1.35])
+    with glance.container(border=True, height=240, key="card_day_glance"):
+        st.html(f"<div class='ds-section'>Day {day} at a glance</div>")
+        st.html(_glance_html(day_summaries))
+    with why.container(border=True, height=240, key="card_why_flagged"):
+        st.html(f"<div class='ds-section'>Why flagged · Day {day}{ui.tip_html('Why flagged chart')}</div>")
+        evidenced = [s for s in day_summaries if s.events_available]
         if evidenced:
-            st.altair_chart(_why_flagged_chart(behaviour_totals(evidenced)), width="stretch")
+            key = f"why_chart_{st.session_state.get('rule_nonce', 0)}"
+            st.altair_chart(_why_flagged_chart(behaviour_totals(evidenced), len(evidenced), st.session_state.get("f_rule")),
+                            width="stretch", key=key, on_select=functools.partial(_pick_rule, key), selection_mode="pick")
+            st.caption("An incident can match several rules")
         else:
-            st.caption("Needs event details (events.parquet next to the incident file).")
-    with right.container(border=True, height=212, key="card_day_glance"):
-        st.html(f"<div class='ds-section'>Day {day}</div>")
-        row = counts[counts["day"] == day]
-        hours = int(row[["above", "tied"]].sum(axis=1).iloc[0]) if len(row) else None
-        tied = int(row["tied"].iloc[0]) if len(row) else None
-        st.html(
-            "<div class='ds-stats'>"
-            f"<div><b>{len(day_summaries)}</b><span>incidents</span></div>"
-            f"<div><b>{hours if hours is not None else '—'}</b><span>alert hours</span></div>"
-            f"<div><b>{tied if tied is not None else '—'}</b><span>tied at cut-off</span></div></div>"
-        )
+            st.caption("No event data (events.parquet missing).")
+    with days.container(border=True, height=240, key="card_queue_by_day"):
+        st.html(f"<div class='ds-section'>HIGH ↑ / MEDIUM ↓ · days 17–30{ui.tip_html('HIGH vs MEDIUM')}</div>")
+        if counts.empty:
+            st.caption("No cut-off data for this source.")
+        else:
+            key = f"day_chart_{day}"  # a new key per day drops the old click
+            st.altair_chart(_queue_by_day_chart(counts, day), width="stretch", key=key,
+                            on_select=functools.partial(_pick_day, key), selection_mode="pick")
 
 
-def _queue_frame(summaries: list[IncidentSummary], selected: str | None, answer_key: bool):
+def _queue_frame(summaries: list[IncidentSummary], selected: str | None, answer_key: bool, columns: tuple[str, ...]):
     rows = []
     for s in summaries:
         candidate = s.top_candidate
@@ -307,17 +405,23 @@ def _queue_frame(summaries: list[IncidentSummary], selected: str | None, answer_
             "User": s.incident.user_id,
             "Hour": _clock(s.incident.start_time) + (f" +{hours - 1}h" if hours > 1 else ""),
             "Why flagged": _why_text(s),
-            "Events": s.event_count,
-            "Top ATT&CK candidate": f"{candidate['technique_id']} {candidate['name']}" if candidate else "—",
+            "Log lines": s.event_count,
+            "Likely technique": f"{candidate['technique_id']} {candidate['name']}" if candidate else "—",
         }
         if answer_key:
             row["Red-team (answer key)"] = s.redteam
         rows.append(row)
     frame = pd.DataFrame(rows)
+    if not frame.empty:
+        frame = frame[[c for c in frame.columns if c in columns or c in ("Incident", "Red-team (answer key)")]]
 
     def style_row(row: pd.Series) -> list[str]:
-        tint = f"background-color: {ui.ACCENT_TINT};" if row["Incident"] == selected else ""
-        return [tint + _priority_cell(row[c]) if c == "Priority" else tint for c in row.index]
+        tint = ""
+        if answer_key and row.get("Red-team (answer key)"):
+            tint = f"background-color: {ui.HIGH_TINT};"
+        if row["Incident"] == selected:
+            tint = f"background-color: {ui.ACCENT_TINT}; font-weight: 600;"
+        return [_priority_cell(row[c]) if c == "Priority" else tint for c in row.index]
 
     return frame.style.apply(style_row, axis=1) if not frame.empty else frame
 
@@ -330,22 +434,25 @@ def _why_text(summary: IncidentSummary) -> str:
 
 def _priority_cell(priority: str) -> str:
     if priority in ("HIGH", "CRITICAL"):
-        return f"color: {ui.HIGH}; font-weight: 700;"
+        return f"background-color: {ui.HIGH}; color: #FFFFFF; font-weight: 700;"
     if priority == "MEDIUM":
-        return "color: #8A5A00; font-weight: 700;"
+        return f"background-color: {ui.MEDIUM}; color: {ui.MEDIUM_INK}; font-weight: 700;"
     return ""
 
 
 QUEUE_COLUMNS = {
     "Priority": st.column_config.TextColumn(width=60),
-    "Rank": st.column_config.NumberColumn(width=40, format="%d"),
+    "Rank": st.column_config.NumberColumn(width=40, format="%d", help=ui.tip("Rank")),
     "Incident": None,  # shown in the side panel; kept in the frame to tint the selected row
-    "User": st.column_config.TextColumn(width=104),
-    "Hour": st.column_config.TextColumn(width=50),
-    "Why flagged": st.column_config.TextColumn(width=206, help="Behaviours behind the alert; +n means more in the side panel"),
-    "Events": st.column_config.NumberColumn(width=50, format="%d"),
-    "Top ATT&CK candidate": st.column_config.TextColumn(width=236),
+    "User": st.column_config.TextColumn(width=104, help=ui.tip("Incident")),
+    "Hour": st.column_config.TextColumn(width=50, help=ui.tip("Queue")),
+    "Why flagged": st.column_config.TextColumn(width=206, help=ui.tip("Why-flagged rules")),
+    "Log lines": st.column_config.NumberColumn(width=62, format="%d", help=ui.tip("Event")),
+    "Likely technique": st.column_config.TextColumn(width=236, help=ui.tip("ATT&CK candidate")),
 }
+HIGH_COLUMNS = ("Rank", "User", "Hour", "Why flagged", "Log lines", "Likely technique")
+MEDIUM_COLUMNS = tuple(c for c in HIGH_COLUMNS if c != "Rank")  # tie-break order means nothing
+ALL_COLUMNS = ("Priority", *HIGH_COLUMNS)
 ROW_HEIGHT = 32
 HEADER_HEIGHT = 35  # Streamlit dataframe header plus borders
 
@@ -355,10 +462,11 @@ def _whole_rows(count: int, limit: int) -> int:
     return min(count, limit) * ROW_HEIGHT + HEADER_HEIGHT
 
 
-def _queue_table(summaries: list[IncidentSummary], key: str, selected: str | None, limit: int) -> None:
+def _queue_table(summaries: list[IncidentSummary], key: str, selected: str | None, limit: int,
+                 columns: tuple[str, ...]) -> None:
     if not summaries:
         return
-    data = _queue_frame(summaries, selected, bool(st.session_state.get("show_answer_key")))
+    data = _queue_frame(summaries, selected, bool(st.session_state.get("show_answer_key")), columns)
     event = st.dataframe(
         data, hide_index=True, column_config=QUEUE_COLUMNS, on_select="rerun", selection_mode="single-row",
         key=f"{key}_{st.session_state.get('queue_nonce', 0)}", row_height=ROW_HEIGHT,
@@ -369,7 +477,18 @@ def _queue_table(summaries: list[IncidentSummary], key: str, selected: str | Non
         st.rerun()
 
 
-def _side_panel(ws: Workspace, summary: IncidentSummary, visible: list[IncidentSummary]) -> None:
+def _queue_group(summaries: list[IncidentSummary], key: str, selected: str | None, limit: int,
+                 title: str, kind: str, columns: tuple[str, ...], term: str | None = None) -> None:
+    """One queue group as a card: a header bar (name and incident count) above its table."""
+    if not summaries:
+        return
+    with st.container(border=True, key=f"card_{key}"):
+        st.html(f"<div class='ds-group {escape(kind)}'><span class='ds-group-title'>{escape(title)}"
+                f"{ui.tip_html(term) if term else ''}</span><span class='ds-count'>{len(summaries)}</span></div>")
+        _queue_table(summaries, key, selected, limit, columns)
+
+
+def _side_panel(ws: Workspace, summary: IncidentSummary, visible: list[IncidentSummary], filtered: bool) -> None:
     ids = [s.incident_id for s in visible]
     position = ids.index(summary.incident_id) if summary.incident_id in ids else 0
     nav = st.container(horizontal=True, vertical_alignment="center")
@@ -380,24 +499,20 @@ def _side_panel(ws: Workspace, summary: IncidentSummary, visible: list[IncidentS
                   disabled=position >= len(ids) - 1):
         _select(ids[position + 1])
         st.rerun()
-    nav.caption(f"{position + 1} of {len(ids)} on this day")
+    nav.caption(f"{position + 1} of {len(ids)} {'shown' if filtered else 'on this day'}")
     rows = _events_of(ws, summary)
-    hosts, new_pairs = _host_counts(rows)
+    unusual = []
+    if (rank := _rank_text(summary)):
+        unusual.append(f"<div class='ds-fact'>{escape(rank)}</div>")
+    percentile = _gru_percentile(summary)
+    if percentile != "—":
+        unusual.append(f"<div class='ds-fact'>Sequence more unusual than {escape(percentile)} of user-hours that day</div>")
     st.html(
         f"<h3 style='margin:0.1rem 0 0.1rem'>{escape(summary.incident.user_id)} — {escape(summary.headline)}</h3>"
         f"<div style='margin-bottom:0.55rem'>{ui.mono(summary.incident_id)}</div>{_badges(summary)}"
-        f"<div class='ds-section' style='margin-top:0.6rem'>Why flagged</div>{_reasons_html(ws, summary)}"
-        f"<div class='ds-section' style='margin-top:0.55rem'>Facts</div>"
-        + ui.facts([
-            ("Hour", _hour_range(summary)),
-            ("Events", str(summary.event_count)),
-            ("Hosts reached", str(hosts) if ws.events is not None else "—"),
-            ("New host pairs", str(new_pairs) if ws.events is not None else "—"),
-        ])
-        + f"<div class='ds-muted' style='margin-top:0.45rem'>Fusion score {format_score(summary.incident.max_fused_score)}"
-          " — a ranking, not a probability</div>"
-        + f"<div class='ds-section' style='margin-top:0.55rem'>ATT&amp;CK candidates "
-          f"<span class='ds-muted' style='font-weight:400'>(not yet verified)</span></div>{_candidates_html(summary, 2)}"
+        f"<div class='ds-muted' style='margin:0.1rem 0 0.4rem'>{escape(_fact_line(summary, rows, full=False))}</div>"
+        f"<div class='ds-section' style='margin-top:0.6rem'>Why flagged{ui.tip_html('Why-flagged rules')}</div>{_reasons_html(ws, summary)}"
+        f"<div class='ds-section' style='margin-top:0.55rem'>How unusual{ui.tip_html('Sequence percentile')}</div>{''.join(unusual)}"
     )
     if st.button("Open incident", type="primary", icon=":material/open_in_new:", width="stretch", key="open_incident"):
         st.switch_page(_pages()["incident"])
@@ -431,17 +546,13 @@ def queue_page() -> None:
                                key=lambda s: (s.rank if s.rank is not None else 10_000, s.incident.start_time))
         _summary_strip(ws, day, day_summaries)
 
-        behaviours = [*CHIP_LABELS.values(), NO_EVIDENCE]
-        filters = st.container(horizontal=True, gap="medium")
-        priorities = filters.pills("Priority", ["HIGH", "MEDIUM"], selection_mode="multi", default=["HIGH", "MEDIUM"], key="f_priority", width="content")
-        wanted = filters.pills("Why flagged", behaviours, selection_mode="multi", key="f_behaviour", width="content")
+        rule = st.session_state.get("f_rule")
+        if rule:
+            active = st.container(horizontal=True, vertical_alignment="center")
+            active.html(f"<div>{ui.badge('Why flagged: ' + rule)}</div>")
+            active.button("Clear filter", icon=":material/close:", type="tertiary", key="clear_rule", on_click=_clear_rule)
 
-        visible = [
-            s for s in day_summaries
-            if s.incident.priority in (priorities or ["HIGH", "MEDIUM"])
-            and (not wanted or any(label in wanted for label in (s.chips or [NO_EVIDENCE])))
-            and matches_search(s, query, ws.events)
-        ]
+        visible = [s for s in day_summaries if matches_rule(s, rule) and matches_search(s, query, ws.events)]
         if visible and st.session_state.get("selected_incident_id") not in {s.incident_id for s in visible}:
             st.session_state["selected_incident_id"] = visible[0].incident_id
         selected_id = st.session_state.get("selected_incident_id")
@@ -449,47 +560,76 @@ def queue_page() -> None:
         if not visible:
             st.info("No incidents on this day match the filters. Clear a filter or pick another day.")
         above = [s for s in visible if s.above_cutoff]
-        tied = [s for s in visible if not s.above_cutoff]
-        _queue_table(above, "queue_above", selected_id, limit=12)
-        if tied and ws.is_package:
-            st.html(ui.cutoff_rule())
-        _queue_table(tied, "queue_tied", selected_id, limit=6)
-        if ws.is_package:
-            st.caption("Rank order among tied rows comes from a fixed tie-break and carries no meaning.")
+        tied = sorted((s for s in visible if not s.above_cutoff), key=lambda s: s.incident.start_time)
+        if not ws.is_package:
+            _queue_group(visible, "queue_all", selected_id, 12, "Incidents", "neutral", ALL_COLUMNS)
+        else:
+            _queue_group(above, "queue_above", selected_id, 12, "HIGH · above cut-off", "high", HIGH_COLUMNS, "HIGH")
+            _queue_group(tied, "queue_tied", selected_id, 8, "MEDIUM · tied at cut-off", "medium", MEDIUM_COLUMNS, "MEDIUM")
     with panel:
         if visible:
-            with st.container(border=True, key="card_panel"):
-                _side_panel(ws, ws.by_id[selected_id], visible)
+            prio = {"HIGH": "high", "CRITICAL": "high", "MEDIUM": "medium"}.get(ws.by_id[selected_id].incident.priority, "none")
+            with st.container(border=True, key=f"card_panel_{prio}"):
+                _side_panel(ws, ws.by_id[selected_id], visible, bool(rule or query.strip()))
 
 
 # ─── Incident page ─────────────────────────────────────────────────────
 
 
-def _lane(orientation: str) -> str:
-    return {"LogOn": "Logon", "LogOff": "Log-off", "TGS": "Ticket request", "TGT": "Ticket request"}.get(orientation, "Other")
+BIN_MINUTES = (1, 2, 5, 10, 15, 30)
 
 
-def _activity_chart(rows: pd.DataFrame, cited: set[str], start: int, end: int) -> alt.Chart:
-    frame = pd.DataFrame({
-        "time": [_BASE + timedelta(seconds=int(t - 1) % 86_400) for t in rows["timestamp"]],
-        "lane": [_lane(o) for o in rows["authentication_orientation"]],
-        "event": rows["source_reference"],
-        "route": rows["source_computer"] + " → " + rows["destination_computer"],
-        "auth": rows["authentication_type"],
-        "cited": rows["source_reference"].isin(cited),
+def _bin_minutes(span_seconds: int) -> int:
+    """Smallest standard bin that gives about 30 bins across the incident's span."""
+    wanted = span_seconds / 60 / 30
+    return next((m for m in BIN_MINUTES if m >= wanted), BIN_MINUTES[-1])
+
+
+def _activity_chart(summary: IncidentSummary, rows: pd.DataFrame, minutes: int) -> alt.Chart:
+    """Log lines per time bin as bars, with a red rule and marker at each flagged event."""
+    start, end = summary.incident.start_time, summary.incident.end_time
+    origin = _BASE + timedelta(seconds=(start - 1) % 86_400)
+    at = lambda seconds: origin + timedelta(seconds=int(seconds))  # noqa: E731
+    width = minutes * 60
+    count = max(1, -(-(end - start) // width))
+    slot = ((rows["timestamp"] - start) // width).clip(0, count - 1)
+    per_slot = slot.value_counts().reindex(range(count), fill_value=0)
+    bins = pd.DataFrame({
+        "slot_start": [at(i * width) for i in range(count)], "slot_end": [at((i + 1) * width) for i in range(count)],
+        "log lines": per_slot.to_numpy(),
     })
-    span = [_BASE + timedelta(seconds=(start - 1) % 86_400), _BASE + timedelta(seconds=(start - 1) % 86_400 + (end - start))]
-    lanes = [lane for lane in ("Logon", "Log-off", "Ticket request", "Other") if lane in set(frame["lane"])]
-    base = alt.Chart(frame).encode(
-        x=alt.X("time:T", title=None, scale=alt.Scale(domain=span),
-                axis=alt.Axis(format="%H:%M", labelFontSize=12, labelColor=ui.MUTED, grid=True, gridColor=ui.LINE, tickCount=6)),
-        y=alt.Y("lane:N", sort=lanes, title=None, scale=alt.Scale(domain=lanes),
-                axis=alt.Axis(labelFontSize=12, labelColor=ui.INK, ticks=False, domain=False)),
-        tooltip=[alt.Tooltip("time:T", format="%H:%M:%S"), "event:N", "route:N", "auth:N"],
+    bins["slot"] = bins["slot_start"].dt.strftime("%H:%M") + "–" + bins["slot_end"].dt.strftime("%H:%M")
+
+    rules_by_ref: dict[str, list[str]] = {}
+    for behaviour in summary.ordered_behaviours:
+        for ref in behaviour["evidence_references"]:
+            rules_by_ref.setdefault(ref, []).append(CHIP_LABELS[behaviour["behaviour"]])
+    flagged = rows[rows["source_reference"].isin(rules_by_ref)]
+    marks = pd.DataFrame({
+        "time": [at(t - start) for t in flagged["timestamp"]], "event": flagged["source_reference"].to_numpy(),
+        "route": (flagged["source_computer"] + " → " + flagged["destination_computer"]).to_numpy(),
+        "rule": [", ".join(rules_by_ref[r]) for r in flagged["source_reference"]],
+    })
+    domain = [origin, at(end - start)]
+    x = alt.X("time:T", title=None, scale=alt.Scale(domain=domain),
+              axis=alt.Axis(format="%H:%M", labelFontSize=12, labelColor=ui.MUTED, grid=False, tickCount=6))
+    bars = alt.Chart(bins[bins["log lines"] > 0]).mark_bar(color=ui.CHART, stroke="#FFFFFF", strokeWidth=1).encode(
+        x=alt.X("slot_start:T", title=None, scale=alt.Scale(domain=domain),
+                axis=alt.Axis(format="%H:%M", labelFontSize=12, labelColor=ui.MUTED, grid=False, tickCount=6)),
+        x2="slot_end:T", y2=alt.datum(0),
+        y=alt.Y("log lines:Q", title=None, scale=alt.Scale(domain=[0, max(1, int(bins["log lines"].max()))], nice=True),
+                axis=alt.Axis(tickCount=4, grid=True, gridColor=ui.LINE, labelFontSize=11, labelColor=ui.MUTED,
+                              ticks=False, domain=False)),
+        tooltip=[alt.Tooltip("slot:N", title="Time slot"), alt.Tooltip("log lines:Q", title="Log lines")],
     )
-    ticks = base.transform_filter("!datum.cited").mark_tick(thickness=2, size=18, color=ui.ACCENT, opacity=0.75)
-    marks = base.transform_filter("datum.cited").mark_tick(thickness=3, size=24, color=ui.HIGH)
-    return (ticks + marks).properties(height=170).configure_view(stroke=None)
+    layers = [bars]
+    if not marks.empty:
+        tooltip = [alt.Tooltip("time:T", format="%H:%M:%S"), alt.Tooltip("event:N", title="Event"),
+                   alt.Tooltip("route:N", title="Route"), alt.Tooltip("rule:N", title="Rule")]
+        layers.append(alt.Chart(marks).mark_rule(color=ui.HIGH, strokeWidth=1.5).encode(x=x, tooltip=tooltip))
+        layers.append(alt.Chart(marks).mark_point(shape="triangle-down", filled=True, color=ui.HIGH, size=70, opacity=1)
+                      .encode(x=x, y=alt.value(4), tooltip=tooltip))
+    return alt.layer(*layers).properties(height=220).configure_view(stroke=None)
 
 
 def _first_time_pairs(rows: pd.DataFrame) -> pd.DataFrame:
@@ -512,65 +652,66 @@ def _overview_tab(ws: Workspace, summary: IncidentSummary, rows: pd.DataFrame) -
             with st.container(border=True, key=f"card_reason_{index}"):
                 count = behaviour["event_count"]
                 st.html(f"<div class='ds-reason' style='padding:0'><b>{escape(HEADLINES[behaviour['behaviour']])}</b>"
-                        f" · {count} event{'s' if count != 1 else ''}<small>{escape(behaviour['description'])}</small>"
+                        f" · {count} event{'s' if count != 1 else ''}<br>"
                         f"{_first_event_line(ws, example)}</div>")
                 if st.button("Show in timeline", key=f"show_{index}", type="tertiary", icon=":material/arrow_forward:"):
-                    st.session_state["incident_tab"] = "Timeline"
+                    _request_tab("Timeline")
                     st.session_state["timeline_focus"] = example
                     st.rerun()
         if not summary.ordered_behaviours:
             with st.container(border=True, key="card_reason_none"):
                 st.html(_reasons_html(ws, summary))
-        st.caption("New = first time since Day 1. Log-offs are not counted as new.")
     with middle:
-        st.html("<div class='ds-section'>Activity in this incident</div>")
+        minutes = _bin_minutes(summary.incident.end_time - summary.incident.start_time)
+        st.html(f"<div class='ds-section'>When it happened · log lines per {minutes} min</div>")
         if rows.empty:
             st.info("Event details are unavailable for this source.")
         else:
-            cited = {ref for b in summary.behaviours for ref in b["evidence_references"]}
             with st.container(border=True, key="card_activity"):
-                st.altair_chart(_activity_chart(rows, cited, summary.incident.start_time, summary.incident.end_time),
-                                width="stretch")
-                st.html(f"<div class='ds-legend'><span class='ds-swatch' style='background:{ui.ACCENT}'></span>event"
-                        f"<span class='ds-swatch' style='background:{ui.HIGH}'></span>event behind “Why flagged”</div>")
+                st.altair_chart(_activity_chart(summary, rows, minutes), width="stretch")
+                st.html(f"<div class='ds-legend'><span class='ds-swatch' style='background:{ui.CHART}'></span>log lines"
+                        f"<span class='ds-swatch' style='background:{ui.HIGH};width:0.2rem;height:0.9rem'></span>flagged event</div>")
             first = _first_time_pairs(rows)
-            st.html("<div class='ds-section' style='margin-top:0.6rem'>Hosts reached for the first time</div>")
+            st.html(f"<div class='ds-section' style='margin-top:0.6rem'>First-time connections{ui.tip_html('New')}</div>")
             if first.empty:
-                st.caption("None: every source → destination pair here had been seen before.")
+                st.caption("None")
             else:
-                st.dataframe(first, hide_index=True, row_height=ROW_HEIGHT)
+                st.dataframe(first.style.map(lambda _: f"color: {ui.HIGH}; font-weight: 600;", subset=["Source → destination"]),
+                             hide_index=True, row_height=ROW_HEIGHT)
     with right:
-        st.html("<div class='ds-section'>Investigation</div>")
-        with st.container(border=True, key="card_summary"):
-            st.html("<div class='ds-section'>Summary</div><div class='ds-pending'><b>AI investigation summary not generated yet</b>"
-                    "Detector evidence is available in the tabs.</div>")
+        _unusual_card(summary)
         with st.container(border=True, key="card_candidates"):
-            st.html("<div class='ds-section'>ATT&amp;CK candidates <span class='ds-muted' style='font-weight:400'>"
-                    f"— not yet verified</span></div>{_candidates_html(summary)}")
-    _scores_strip(summary)
+            st.html(f"<div class='ds-section'>Possible techniques (unverified){ui.tip_html('ATT&CK candidate')}</div>"
+                    f"{_candidates_html(summary)}")
 
 
-def _scores_strip(summary: IncidentSummary) -> None:
+def _unusual_card(summary: IncidentSummary) -> None:
+    hours = summary.incident.raw.get("alert_hours") or []
+    items = []
+    percentile = _gru_percentile(summary)
+    if percentile != "—":
+        items.append(f"<div><b>{escape(percentile)}</b><span>of user-hours that day are less unusual</span></div>")
+    if len(hours) > 1:
+        items.append(f"<div><b>{len(hours)}</b><span>alert hours</span></div>")
+    with st.container(border=True, key="card_unusual"):
+        st.html(f"<div class='ds-section'>How unusual{ui.tip_html('Sequence percentile')}</div>"
+                f"<div class='ds-stats'>{''.join(items)}</div>")
+
+
+def _gru_percentile(summary: IncidentSummary) -> str:
     hours = summary.incident.raw.get("alert_hours") or []
     gru = max((h["gru_percentile_in_day"] for h in hours), default=None)
-    graph = summary.incident.graph.max_score
-    with st.container(border=True, key="card_scores"):
-        st.html("<div class='ds-section'>Scores</div>" + ui.facts([
-            ("Fusion score — a ranking, not a probability", format_score(summary.incident.max_fused_score)),
-            ("GRU score, percentile within its day", f"{gru:.2%}" if gru is not None else format_score(summary.incident.sequence.max_score)),
-            ("Graph detector — context only, not used by the model", format_score(graph)),
-            ("Alert hours in this incident", str(len(hours)) if hours else "—"),
-        ]))
+    return f"{gru:.2%}" if gru is not None else "—"
 
 
 def _timeline_tab(ws: Workspace, summary: IncidentSummary, rows: pd.DataFrame) -> None:
     if rows.empty:
-        st.info("Event details are unavailable for this source.")
+        st.info("No event data for this source.")
         st.dataframe({"Event ID": summary.incident.raw.get("source_references") or []}, hide_index=True)
         return
     cited = list(dict.fromkeys(r for b in summary.ordered_behaviours for r in b["evidence_references"]))
     focus = st.session_state.get("timeline_focus")
-    options = [f"Events behind “Why flagged” ({len(cited)})", f"All events ({len(rows)})"] if cited else [f"All events ({len(rows)})"]
+    options = [f"Flagged events ({len(cited)})", f"All events ({len(rows)})"] if cited else [f"All events ({len(rows)})"]
     choice = st.segmented_control("Show", options, default=options[0],
                                   key=f"timeline_view_{summary.incident_id}_{focus or ''}")
     shown = rows[rows["source_reference"].isin(cited)] if choice == options[0] and cited else rows
@@ -580,11 +721,28 @@ def _timeline_tab(ws: Workspace, summary: IncidentSummary, rows: pd.DataFrame) -
     target = focus if focus in present else next((r for r in present if r in set(cited)), present[0])
     visible_rows = min(len(shown), max(12, present.index(target) + 2), 24)
     table = timeline_table(shown)
-    styled = table.style.apply(
-        lambda row: [f"background-color: {ui.ACCENT_TINT}; font-weight: 600;" if row["Event ID"] == target else ""] * len(row), axis=1)
-    st.caption("Select an event to see its full source record. Novelty flags mean a first appearance since Day 1; "
-               "log-offs are not counted as new.")
+    flagged = set(cited)
+
+    def style_event(row: pd.Series) -> list[str]:
+        if row["Event ID"] == target:
+            css = f"background-color: {ui.ACCENT_TINT}; font-weight: 600;"
+        elif row["Event ID"] in flagged:
+            css = f"background-color: {ui.HIGH_TINT};"
+        else:
+            css = ""
+        return [css + (f"color: {ui.HIGH}; font-weight: 600;" if c == "Flags" and "new" in str(row[c]) else "") for c in row.index]
+
+    styled = table.style.apply(style_event, axis=1)
     event = st.dataframe(styled, hide_index=True, on_select="rerun", selection_mode="single-row",
+                         column_config={"Time": st.column_config.TextColumn(width=130),
+                                        "Event ID": st.column_config.TextColumn(width=135, help=ui.tip("Event")),
+                                        "Source": st.column_config.TextColumn(width=75),
+                                        "Destination": st.column_config.TextColumn(width=85),
+                                        "Auth type": st.column_config.TextColumn(width=75),
+                                        "Logon type": st.column_config.TextColumn(width=80),
+                                        "Orientation": st.column_config.TextColumn(width=85),
+                                        "Result": st.column_config.TextColumn(width=70),
+                                        "Flags": st.column_config.TextColumn(width=380, help=ui.tip("New"))},
                          key=f"timeline_{summary.incident_id}_{choice}", row_height=ROW_HEIGHT,
                          height=visible_rows * ROW_HEIGHT + HEADER_HEIGHT)
     if event.selection.rows:
@@ -639,58 +797,54 @@ def _hosts_tab(rows: pd.DataFrame) -> None:
         return
     pairs = host_pair_table(rows)
     st.html("<div class='ds-section'>Who connected to what</div>")
-    dot, hidden = _host_graph(pairs)
+    dot, _ = _host_graph(pairs)
     with st.container(border=True, key="card_host_graph"):
         st.graphviz_chart(dot, width="stretch", height=470)
-    st.caption("Red arrows and boxes marked new: the first time this user, or this pair of computers, made the connection. "
-               "Records where a computer logs on or off itself are left out."
-               + (f" {hidden} known pairs with fewer events are also left out; the table lists every pair." if hidden else ""))
+    st.caption("Red = first-time connection · Dark box = user's main computer")
     st.html("<div class='ds-section' style='margin-top:0.6rem'>Source → destination pairs</div>")
     st.dataframe(pairs, hide_index=True, row_height=ROW_HEIGHT, height=min(len(pairs), 15) * ROW_HEIGHT + HEADER_HEIGHT, column_config={
         "Events": st.column_config.NumberColumn(width=70),
         "Failures": st.column_config.NumberColumn(width=80),
-        "New destination for user": st.column_config.CheckboxColumn(width=180),
-        "New host pair": st.column_config.CheckboxColumn(width=120),
-        "New source for user": st.column_config.CheckboxColumn(width=160),
+        "New destination for user": st.column_config.CheckboxColumn(width=180, help=ui.tip("New")),
+        "New host pair": st.column_config.CheckboxColumn(width=120, help=ui.tip("New")),
+        "New source for user": st.column_config.CheckboxColumn(width=160, help=ui.tip("New")),
     })
 
 
-def _evidence_tab(summary: IncidentSummary) -> None:
+def _model_details_tab(summary: IncidentSummary) -> None:
     raw = summary.incident.raw
     if raw.get("alert_hours"):
         st.html("<div class='ds-section'>Alerted hours</div>")
-        st.dataframe(alert_hours_table(raw, bool(st.session_state.get("show_answer_key"))), hide_index=True)
-    references = raw.get("source_references") or []
-    behind = len({r for b in summary.behaviours for r in b["evidence_references"]})
-    st.html(f"<div class='ds-section' style='margin-top:0.6rem'>Events in this incident</div>"
-            f"<div class='ds-muted'>{len(references)} auth.txt lines make up this incident; {behind} of them are behind "
-            "“Why flagged”. The Timeline tab lists them all.</div>")
+        st.dataframe(alert_hours_table(raw, bool(st.session_state.get("show_answer_key"))), hide_index=True,
+                     column_config={"Tied at cut-off": st.column_config.CheckboxColumn(help=ui.tip("Tied at cut-off"))})
+    st.html("<div class='ds-section' style='margin-top:0.6rem'>Model scores</div>")
+    fusion, graph, _ = st.columns(3)
+    fusion.metric("Fusion score", format_score(summary.incident.max_fused_score), help=ui.tip("Fusion score"), border=True)
+    graph.metric("Graph score", format_score(summary.incident.graph.max_score), help=ui.tip("Graph score"), border=True)
     context = raw.get("graph_context")
     if context:
-        st.html("<div class='ds-section' style='margin-top:0.6rem'>Graph detector context</div>")
-        st.caption("The graph detector's view of this user's day. The final model does not use it, and the graph team "
-                   "inspected days 17–30 during development, so it is context, not an independent result.")
-        st.html(ui.facts([("New edges that day", str(context.get("new_edge_count", "—"))),
-                          ("Degree growth", str(context.get("degree_growth", "—")))]))
+        st.html(f"<div class='ds-section' style='margin-top:0.6rem'>Graph detector context{ui.tip_html('Graph context')}</div>")
+        edges_new, growth, _ = st.columns(3)
+        edges_new.metric("New edges", str(context.get("new_edge_count", "—")), help=ui.tip("New edges"), border=True)
+        growth.metric("Degree growth", str(context.get("degree_growth", "—")), help=ui.tip("Degree growth"), border=True)
         edges = graph_edges_table(raw)
         if edges.empty:
-            st.info("No graph edges were recorded for this user-day.")
+            st.info("No graph edges for this user-day.")
         else:
-            st.dataframe(edges, hide_index=True)
+            st.dataframe(edges, hide_index=True,
+                         column_config={"Edge score (raw)": st.column_config.NumberColumn(help=ui.tip("Edge score"))})
 
 
 def _investigation_tab(summary: IncidentSummary) -> None:
     left, right = st.columns([1, 1.4], gap="large")
     with left, st.container(border=True, key="card_inv_summary"):
-        st.html("<div class='ds-section'>Summary</div><div class='ds-pending'><b>AI investigation summary not generated yet</b>"
-                "When Task 6.2 runs, its summary appears here with every claim linked to an event. "
-                "Detector evidence stays available in the other tabs either way.</div>")
+        st.html("<div class='ds-section'>Summary</div><div class='ds-pending'><b>No AI summary yet</b>"
+                "Pending Task 6.2</div>")
     with right:
-        st.html("<div class='ds-section'>ATT&amp;CK candidates — not yet verified</div>")
-        st.caption("Retrieved from MITRE ATT&CK 19.2 by matching each behaviour's description. A candidate is a "
-                   "lead to check, not a finding; verification (Task 6.3) will mark each supported, uncertain or rejected.")
+        st.html("<div class='ds-section'>ATT&amp;CK candidates</div>")
+        st.caption("MITRE ATT&CK 19.2 · Unverified until Task 6.3")
         if not summary.candidates:
-            st.info("No candidates: no event matched a behaviour rule.")
+            st.info("No candidates")
         for candidate in summary.candidates:
             with st.expander(f"{candidate['technique_id']} · {candidate['name']}"):
                 st.html(f"<div>{ui.badge('Unverified')}{ui.badge('Retrieved by: ' + ', '.join(CHIP_LABELS[b] for b in candidate['retrieved_by']))}</div>")
@@ -726,7 +880,8 @@ def incident_page() -> None:
     ids = [s.incident_id for s in ordered]
     position = ids.index(summary.incident_id)
 
-    st.html(f"<div class='ds-crumb'>Queue › Day {summary.day} › {ui.mono(summary.incident_id)}</div>")
+    st.html(ui.priority_bar(summary.incident.priority)
+            + f"<div class='ds-crumb'>Queue › Day {summary.day} › {ui.mono(summary.incident_id)}</div>")
     title, buttons = st.columns([4, 1.3], vertical_alignment="center")
     title.title(f"{summary.incident.user_id} — {summary.headline}")
     with buttons.container(horizontal=True, horizontal_alignment="right"):
@@ -737,18 +892,15 @@ def incident_page() -> None:
             _select(ids[position + 1])
             st.rerun()
     rows = _events_of(ws, summary)
-    hosts, _ = _host_counts(rows)
-    facts = [ui.badge(_hour_range(summary)), ui.badge(f"{summary.event_count} events")]
-    if ws.events is not None:
-        facts.append(ui.badge(f"{hosts} hosts"))
-    st.html(f"<div>{_badges(summary, extra=facts)}</div>")
+    st.html(f"<div>{_badges(summary)}<span class='ds-factline'>{escape(_fact_line(summary, rows, full=True))}</span></div>")
 
     pairs = len(host_pair_table(rows)) if not rows.empty else 0
-    labels = {"Overview": "Overview", "Timeline": f"Timeline ({len(rows)})", "Hosts": f"Hosts ({pairs})",
-              "Evidence": "Evidence", "Investigation": "Investigation"}
-    wanted = st.session_state.pop("incident_tab", None)
+    labels = {"Overview": "Overview", "Timeline": f"Timeline ({len(rows)})", "Connections": f"Connections ({pairs})",
+              "Model details": "Model details", "Investigation": "Investigation"}
+    # The key changes only when a tab is requested, so clicks inside a tab keep it open.
+    wanted = st.session_state.get("incident_tab")
     tabs = st.tabs(list(labels.values()), default=labels.get(wanted) if wanted else None,
-                   key=f"incident_tabs_{summary.incident_id}_{wanted or ''}")
+                   key=f"incident_tabs_{summary.incident_id}_{st.session_state.get('tab_request', 0)}")
     with tabs[0]:
         _overview_tab(ws, summary, rows)
     with tabs[1]:
@@ -756,7 +908,7 @@ def incident_page() -> None:
     with tabs[2]:
         _hosts_tab(rows)
     with tabs[3]:
-        _evidence_tab(summary)
+        _model_details_tab(summary)
     with tabs[4]:
         _investigation_tab(summary)
 
@@ -769,16 +921,16 @@ def evidence_page() -> None:
     if ws is None:
         return
     st.title("Evidence")
-    st.html(f"<div class='ds-provenance'>Look up any cited authentication event by its source line.</div>")
+    st.html("<div class='ds-provenance'>Look up an event by ID</div>")
     if ws.events is None:
-        st.info("Event details are unavailable for this source: there is no events.parquet next to the incident file.")
+        st.info("No event data (events.parquet missing).")
         return
     reference = st.text_input("Event ID", placeholder="auth.txt:463603187", key="evidence_lookup").strip()
     if not reference:
-        st.caption(f"{len(ws.events):,} events from {len(ws.summaries)} incidents are available.")
+        st.caption(f"{len(ws.events):,} events · {len(ws.summaries)} incidents")
         return
     if reference not in ws.events.index:
-        st.warning(f"{reference} is not cited by any incident in this package. Event IDs look like auth.txt:463603187.")
+        st.warning(f"{reference}: not cited by any incident")
         return
     citing = [s for s in ws.summaries if reference in set(s.incident.raw.get("source_references") or [])]
     left, right = st.columns([1.3, 1], gap="large")
@@ -800,32 +952,24 @@ def evidence_page() -> None:
 
 def about_page() -> None:
     st.title("About the model")
-    st.html("<div class='ds-provenance'>How to read this dashboard, in plain words.</div>")
-    left, right, _ = st.columns([1, 1, 0.45], gap="large")
-    with left:
+    st.html("<div class='ds-provenance'>Model, scores and labels</div>")
+    table, notes, _ = st.columns([1.5, 1, 0.2], gap="large")
+    with table, st.container(border=True, key="card_glossary"):
+        st.html(ui.glossary_table())
+    with notes:
         st.markdown(
-            "**What DualScope does.** It reads the LANL enterprise logon records and, for every user and hour, "
-            "scores how unusual the activity looks. The final model is a gradient-boosted classifier over a GRU "
-            "sequence score and hourly counts (new hosts, NTLM, failures and similar). Each day, the "
-            f"{QUEUE_SIZE} highest-scoring user-hours become alerts, and alerts for the same user a few hours apart "
-            "form one incident.\n\n"
-            "**The day cut-off.** The model gives many hours exactly the same score. Hours scored above the "
-            "lowest queued score are in the queue whatever happens (HIGH). Hours tied at that score fill the last "
-            "places, picked by a fixed tie-break (MEDIUM); their rank among each other means nothing.\n\n"
-            "**Scores.** The fusion score ranks user-hours; it is not the probability of an attack."
+            "**Model**\n"
+            "- Data: LANL enterprise authentication logs, scored per user per hour\n"
+            "- Final model: gradient boosting over a GRU sequence score and hourly counts\n"
+            f"- Queue: top {QUEUE_SIZE} user-hours per day; nearby hours for one user form an incident\n\n"
+            "**Priority**\n"
+            "- HIGH: score above the day's cut-off\n"
+            "- MEDIUM: tied at the cut-off score; picked by a fixed tie-break, so rank order is arbitrary\n\n"
+            "**Test result (days 17–30)**\n"
+            "- Red-team user-hours caught: 1 of 39\n"
+            "- Average precision: 0.00124 (GRU alone: 0.00020)\n"
+            "- Labels come from one red team and are incomplete"
         )
-    with right:
-        st.markdown(
-            "**Why flagged.** Each incident's events are checked against four rules: failed logons, an NTLM "
-            "logon to a host the user never reached before, any network logon to a new host, and a logon from a "
-            "new source computer. *New* means the first time since Day 1; log-offs are not counted.\n\n"
-            "**ATT&CK candidates.** Each behaviour is matched against MITRE ATT&CK 19.2 to suggest techniques. "
-            "They are leads, not findings, until verification marks them supported or rejected.\n\n"
-            "**How well it did.** On the held-out test days 17–30 the queue held 1 of the 39 red-team user-hours. "
-            "Its average precision was about six times the sequence detector's alone (0.00124 against 0.00020), but that "
-            "did not turn into more catches at 38 alerts a day. The labels are incomplete and come from one red team."
-        )
-    st.caption("Switch on **Answer key** in the sidebar to see which alerts were red-team activity. Keep it off for analyst review.")
 
 
 # ─── App shell ─────────────────────────────────────────────────────────
@@ -844,14 +988,15 @@ def run() -> None:
     st.set_page_config(page_title="DualScope", page_icon=":material/radar:", layout="wide", initial_sidebar_state="auto")
     st.html(ui.CSS)
     page = st.navigation(list(_pages().values()))
-    # Deep links (?incident=<id>&tab=Hosts) select an incident once per link.
+    # Deep links (?incident=<id>&tab=Connections) select an incident once per link.
     link = (st.query_params.get("incident"), st.query_params.get("tab"))
     if link[0] and st.session_state.get("_deep_link") != link:
         st.session_state["_deep_link"] = link
         _select(link[0])
-        if link[1] in TAB_LABELS:
-            st.session_state["incident_tab"] = link[1]
+        tab = TAB_ALIASES.get(link[1], link[1])
+        if tab in TAB_LABELS:
+            _request_tab(tab)
     st.session_state["_source"] = _source_controls()
-    st.sidebar.toggle("Answer key (evaluation only)", key="show_answer_key",
-                      help="Shows which alerts were red-team activity. Keep off for analyst review.")
+    st.sidebar.toggle("Answer key", key="show_answer_key",
+                      help="Show red-team labels (evaluation only)")
     page.run()

@@ -30,7 +30,7 @@ HEADLINES = {
     "network_logon_to_new_destination": "Network logon to a new host",
     "logon_from_new_source": "Logon from a new source computer",
 }
-NO_EVIDENCE = "Not enough evidence"
+NO_EVIDENCE = "No rule matched"
 NO_EVENTS = "Event details unavailable"
 
 
@@ -135,6 +135,11 @@ def behaviour_totals(summaries: Iterable[IncidentSummary]) -> pd.DataFrame:
             counts[HEADLINES[behaviour["behaviour"]]] += 1
     ordered = sorted(counts.items(), key=lambda item: -item[1]) + [(NO_EVIDENCE, none)]
     return pd.DataFrame(ordered, columns=["behaviour", "incidents"])
+
+
+def matches_rule(summary: IncidentSummary, rule: str | None) -> bool:
+    """No filter, or the incident's chip labels (or NO_EVIDENCE when none matched) include ``rule``."""
+    return not rule or rule in (summary.chips or [NO_EVIDENCE])
 
 
 def matches_search(summary: IncidentSummary, query: str, events: pd.DataFrame | None) -> bool:

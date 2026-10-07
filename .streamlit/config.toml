@@ -46,7 +46,7 @@ orangeColor = "#D99A1E"
 greenColor = "#2E8B57"
 blueColor = "#3B4250"
 grayColor = "#7D838C"
-chartCategoricalColors = ["#3B4250", "#C4391F", "#D99A1E", "#9AA1AA", "#1F2328"]
+chartCategoricalColors = ["#2563EB", "#C4391F", "#D99A1E", "#9AA1AA", "#1F2328"]
 
 [theme.sidebar]
 backgroundColor = "#1F2328"
