@@ -229,23 +229,23 @@ def _queue_by_day_chart(counts: pd.DataFrame, day: int) -> alt.Chart:
                          total=counts["above"] + counts["tied"])
     order = list(days["Day"])
     x = alt.X("Day:N", sort=order, scale=alt.Scale(domain=order), title=None,
-              axis=alt.Axis(labelAngle=0, labelFontSize=12, labelColor=ui.INK, labelOverlap=False, labelPadding=6, titleFontSize=13,
+              axis=alt.Axis(labelAngle=0, labelFontSize=11, labelColor=ui.INK, labelOverlap=False, labelPadding=6, titleFontSize=13,
                             titleColor=ui.MUTED, titleFontWeight="normal"))
-    band = (alt.Chart(days[days["day"] == day]).mark_bar(width={"band": 1.0}, color=ui.TEAL_TINT, stroke=ui.TEAL,
-                                                         strokeWidth=1.5, cornerRadius=3)
+    band = (alt.Chart(days[days["day"] == day]).mark_bar(width={"band": 1.0}, color=ui.ACCENT_TINT,
+                                                         cornerRadius=3)
             .encode(x=x, y=alt.datum(QUEUE_SIZE + 14), y2=alt.datum(0)))
     bars = alt.Chart(long).mark_bar(width={"band": 0.7}).encode(
         x=x,
         y=alt.Y("alerts:Q", title=None, stack=True, scale=alt.Scale(domain=[0, QUEUE_SIZE + 14]),
-                axis=alt.Axis(values=[0, 19, 38], grid=True, gridColor=ui.LINE, labelFontSize=13, labelColor=ui.MUTED)),
-        color=alt.Color("status:N", scale=alt.Scale(domain=["Above cut-off", "Tied"], range=[ui.TEAL, ui.TIED]),
-                        legend=alt.Legend(orient="top", direction="horizontal", title=None, labelFontSize=14, labelColor=ui.INK, symbolType="square")),
+                axis=alt.Axis(values=[0, 19, 38], grid=True, gridColor=ui.LINE, labelFontSize=11, labelColor=ui.MUTED)),
+        color=alt.Color("status:N", scale=alt.Scale(domain=["Above cut-off", "Tied"], range=[ui.ACCENT, ui.TIED]),
+                        legend=alt.Legend(orient="top", direction="horizontal", title=None, labelFontSize=12, labelColor=ui.INK, symbolType="square")),
         order=alt.Order("status:N", sort="ascending"),
         tooltip=[alt.Tooltip("Day:N", title="Test day"), "status:N", "alerts:Q"],
     )
-    labels = (alt.Chart(days[days["day"] == day]).mark_text(dy=-9, fontSize=14, fontWeight=600, color=ui.INK)
+    labels = (alt.Chart(days[days["day"] == day]).mark_text(dy=-7, fontSize=12, fontWeight=600, color=ui.INK)
               .encode(x=x, y="total:Q", text="label:N"))
-    return (band + bars + labels).properties(height=215).configure_view(stroke=None)
+    return (band + bars + labels).properties(height=158).configure_view(stroke=None)
 
 
 def _why_flagged_chart(totals: pd.DataFrame) -> alt.Chart:
@@ -254,27 +254,27 @@ def _why_flagged_chart(totals: pd.DataFrame) -> alt.Chart:
                            behaviour=[short.get(b, b) for b in totals["behaviour"]])
     base = alt.Chart(totals).encode(
         y=alt.Y("behaviour:N", sort=None, title=None,
-                axis=alt.Axis(labelLimit=180, labelFontSize=14, labelColor=ui.INK, ticks=False, domain=False)),
+                axis=alt.Axis(labelLimit=160, labelFontSize=12, labelColor=ui.INK, ticks=False, domain=False)),
         x=alt.X("incidents:Q", title=None, axis=None, scale=alt.Scale(domain=[0, max(1, int(totals["incidents"].max())) * 1.55])),
     )
-    bars = base.mark_bar(cornerRadiusEnd=3, height=20).encode(
-        color=alt.Color("kind:N", scale=alt.Scale(domain=["rule", "none"], range=[ui.SHELL, "#B9C6C9"]), legend=None),
+    bars = base.mark_bar(cornerRadiusEnd=3, height=15).encode(
+        color=alt.Color("kind:N", scale=alt.Scale(domain=["rule", "none"], range=[ui.SHELL, "#B8BEC6"]), legend=None),
         tooltip=["behaviour:N", "incidents:Q"],
     )
-    labels = base.mark_text(align="left", dx=5, fontSize=14, color=ui.INK).encode(text="incidents:Q")
-    return (bars + labels).properties(height=200).configure_view(stroke=None)
+    labels = base.mark_text(align="left", dx=4, fontSize=12, color=ui.INK).encode(text="incidents:Q")
+    return (bars + labels).properties(height=150).configure_view(stroke=None)
 
 
 def _summary_strip(ws: Workspace, day: int, day_summaries: list[IncidentSummary]) -> None:
     counts = day_cutoff_counts(s.incident for s in ws.summaries)
     left, middle, right = st.columns([1.45, 1.1, 0.55])
-    with left.container(border=True, height=286, key="card_queue_by_day"):
+    with left.container(border=True, height=212, key="card_queue_by_day"):
         st.html("<div class='ds-section'>Queue by test day</div>")
         if counts.empty:
             st.caption("The cut-off needs a final-model package; this source has no alert hours.")
         else:
             st.altair_chart(_queue_by_day_chart(counts, day), width="stretch")
-    with middle.container(border=True, height=286, key="card_why_flagged"):
+    with middle.container(border=True, height=212, key="card_why_flagged"):
         evidenced = [s for s in ws.summaries if s.events_available]
         st.html(f"<div class='ds-section'>Why flagged <span class='ds-muted' style='font-weight:400'>· "
                 f"{len(evidenced)} incidents</span></div>")
@@ -282,7 +282,7 @@ def _summary_strip(ws: Workspace, day: int, day_summaries: list[IncidentSummary]
             st.altair_chart(_why_flagged_chart(behaviour_totals(evidenced)), width="stretch")
         else:
             st.caption("Needs event details (events.parquet next to the incident file).")
-    with right.container(border=True, height=286, key="card_day_glance"):
+    with right.container(border=True, height=212, key="card_day_glance"):
         st.html(f"<div class='ds-section'>Day {day}</div>")
         row = counts[counts["day"] == day]
         hours = int(row[["above", "tied"]].sum(axis=1).iloc[0]) if len(row) else None
@@ -316,7 +316,7 @@ def _queue_frame(summaries: list[IncidentSummary], selected: str | None, answer_
     frame = pd.DataFrame(rows)
 
     def style_row(row: pd.Series) -> list[str]:
-        tint = f"background-color: {ui.TEAL_TINT};" if row["Incident"] == selected else ""
+        tint = f"background-color: {ui.ACCENT_TINT};" if row["Incident"] == selected else ""
         return [tint + _priority_cell(row[c]) if c == "Priority" else tint for c in row.index]
 
     return frame.style.apply(style_row, axis=1) if not frame.empty else frame
@@ -337,17 +337,17 @@ def _priority_cell(priority: str) -> str:
 
 
 QUEUE_COLUMNS = {
-    "Priority": st.column_config.TextColumn(width=64),
-    "Rank": st.column_config.NumberColumn(width=44, format="%d"),
+    "Priority": st.column_config.TextColumn(width=60),
+    "Rank": st.column_config.NumberColumn(width=40, format="%d"),
     "Incident": None,  # shown in the side panel; kept in the frame to tint the selected row
-    "User": st.column_config.TextColumn(width=118),
-    "Hour": st.column_config.TextColumn(width=54),
-    "Why flagged": st.column_config.TextColumn(width=226, help="Behaviours behind the alert; +n means more in the side panel"),
-    "Events": st.column_config.NumberColumn(width=54, format="%d"),
-    "Top ATT&CK candidate": st.column_config.TextColumn(width=250),
+    "User": st.column_config.TextColumn(width=104),
+    "Hour": st.column_config.TextColumn(width=50),
+    "Why flagged": st.column_config.TextColumn(width=206, help="Behaviours behind the alert; +n means more in the side panel"),
+    "Events": st.column_config.NumberColumn(width=50, format="%d"),
+    "Top ATT&CK candidate": st.column_config.TextColumn(width=236),
 }
-ROW_HEIGHT = 40
-HEADER_HEIGHT = 37  # Streamlit dataframe header plus borders
+ROW_HEIGHT = 32
+HEADER_HEIGHT = 35  # Streamlit dataframe header plus borders
 
 
 def _whole_rows(count: int, limit: int) -> int:
@@ -384,10 +384,10 @@ def _side_panel(ws: Workspace, summary: IncidentSummary, visible: list[IncidentS
     rows = _events_of(ws, summary)
     hosts, new_pairs = _host_counts(rows)
     st.html(
-        f"<h3 style='margin:0.2rem 0 0.15rem'>{escape(summary.incident.user_id)} — {escape(summary.headline)}</h3>"
+        f"<h3 style='margin:0.1rem 0 0.1rem'>{escape(summary.incident.user_id)} — {escape(summary.headline)}</h3>"
         f"<div style='margin-bottom:0.55rem'>{ui.mono(summary.incident_id)}</div>{_badges(summary)}"
-        f"<div class='ds-section' style='margin-top:0.9rem'>Why flagged</div>{_reasons_html(ws, summary)}"
-        f"<div class='ds-section' style='margin-top:0.8rem'>Facts</div>"
+        f"<div class='ds-section' style='margin-top:0.6rem'>Why flagged</div>{_reasons_html(ws, summary)}"
+        f"<div class='ds-section' style='margin-top:0.55rem'>Facts</div>"
         + ui.facts([
             ("Hour", _hour_range(summary)),
             ("Events", str(summary.event_count)),
@@ -396,7 +396,7 @@ def _side_panel(ws: Workspace, summary: IncidentSummary, visible: list[IncidentS
         ])
         + f"<div class='ds-muted' style='margin-top:0.45rem'>Fusion score {format_score(summary.incident.max_fused_score)}"
           " — a ranking, not a probability</div>"
-        + f"<div class='ds-section' style='margin-top:0.8rem'>ATT&amp;CK candidates "
+        + f"<div class='ds-section' style='margin-top:0.55rem'>ATT&amp;CK candidates "
           f"<span class='ds-muted' style='font-weight:400'>(not yet verified)</span></div>{_candidates_html(summary, 2)}"
     )
     if st.button("Open incident", type="primary", icon=":material/open_in_new:", width="stretch", key="open_incident"):
@@ -418,9 +418,9 @@ def queue_page() -> None:
         st.session_state["day"] = selected.day if selected else days[0]
 
     # The incident panel runs full height on the right, beside the header and strip.
-    main, panel = st.columns([0.7, 0.3], gap="medium")
+    main, panel = st.columns([0.72, 0.28], gap="medium")
     with main:
-        head, pick, _, search = st.columns([0.36, 0.16, 0.08, 0.4], vertical_alignment="bottom")
+        head, pick, _, search = st.columns([0.36, 0.16, 0.08, 0.4], vertical_alignment="center")
         head.title("Alert queue")
         day = pick.selectbox("Day", days, format_func=lambda d: f"Day {d}", key="day", label_visibility="collapsed")
         query = search.text_input("Search", placeholder="Search user, host or event ID", key="f_search",
@@ -450,10 +450,10 @@ def queue_page() -> None:
             st.info("No incidents on this day match the filters. Clear a filter or pick another day.")
         above = [s for s in visible if s.above_cutoff]
         tied = [s for s in visible if not s.above_cutoff]
-        _queue_table(above, "queue_above", selected_id, limit=8)
+        _queue_table(above, "queue_above", selected_id, limit=12)
         if tied and ws.is_package:
             st.html(ui.cutoff_rule())
-        _queue_table(tied, "queue_tied", selected_id, limit=4)
+        _queue_table(tied, "queue_tied", selected_id, limit=6)
         if ws.is_package:
             st.caption("Rank order among tied rows comes from a fixed tie-break and carries no meaning.")
     with panel:
@@ -482,14 +482,14 @@ def _activity_chart(rows: pd.DataFrame, cited: set[str], start: int, end: int) -
     lanes = [lane for lane in ("Logon", "Log-off", "Ticket request", "Other") if lane in set(frame["lane"])]
     base = alt.Chart(frame).encode(
         x=alt.X("time:T", title=None, scale=alt.Scale(domain=span),
-                axis=alt.Axis(format="%H:%M", labelFontSize=14, labelColor=ui.MUTED, grid=True, gridColor=ui.LINE, tickCount=6)),
+                axis=alt.Axis(format="%H:%M", labelFontSize=12, labelColor=ui.MUTED, grid=True, gridColor=ui.LINE, tickCount=6)),
         y=alt.Y("lane:N", sort=lanes, title=None, scale=alt.Scale(domain=lanes),
-                axis=alt.Axis(labelFontSize=14, labelColor=ui.INK, ticks=False, domain=False)),
+                axis=alt.Axis(labelFontSize=12, labelColor=ui.INK, ticks=False, domain=False)),
         tooltip=[alt.Tooltip("time:T", format="%H:%M:%S"), "event:N", "route:N", "auth:N"],
     )
-    ticks = base.transform_filter("!datum.cited").mark_tick(thickness=2, size=22, color=ui.TEAL, opacity=0.75)
-    marks = base.transform_filter("datum.cited").mark_tick(thickness=4, size=30, color=ui.HIGH)
-    return (ticks + marks).properties(height=230).configure_view(stroke=None)
+    ticks = base.transform_filter("!datum.cited").mark_tick(thickness=2, size=18, color=ui.ACCENT, opacity=0.75)
+    marks = base.transform_filter("datum.cited").mark_tick(thickness=3, size=24, color=ui.HIGH)
+    return (ticks + marks).properties(height=170).configure_view(stroke=None)
 
 
 def _first_time_pairs(rows: pd.DataFrame) -> pd.DataFrame:
@@ -531,14 +531,14 @@ def _overview_tab(ws: Workspace, summary: IncidentSummary, rows: pd.DataFrame) -
             with st.container(border=True, key="card_activity"):
                 st.altair_chart(_activity_chart(rows, cited, summary.incident.start_time, summary.incident.end_time),
                                 width="stretch")
-                st.html(f"<div class='ds-legend'><span class='ds-swatch' style='background:{ui.TEAL}'></span>event"
+                st.html(f"<div class='ds-legend'><span class='ds-swatch' style='background:{ui.ACCENT}'></span>event"
                         f"<span class='ds-swatch' style='background:{ui.HIGH}'></span>event behind “Why flagged”</div>")
             first = _first_time_pairs(rows)
             st.html("<div class='ds-section' style='margin-top:0.6rem'>Hosts reached for the first time</div>")
             if first.empty:
                 st.caption("None: every source → destination pair here had been seen before.")
             else:
-                st.dataframe(first, hide_index=True, row_height=38)
+                st.dataframe(first, hide_index=True, row_height=ROW_HEIGHT)
     with right:
         st.html("<div class='ds-section'>Investigation</div>")
         with st.container(border=True, key="card_summary"):
@@ -578,15 +578,15 @@ def _timeline_tab(ws: Workspace, summary: IncidentSummary, rows: pd.DataFrame) -
 
     present = list(shown["source_reference"])
     target = focus if focus in present else next((r for r in present if r in set(cited)), present[0])
-    visible_rows = min(len(shown), max(10, present.index(target) + 2), 24)
+    visible_rows = min(len(shown), max(12, present.index(target) + 2), 24)
     table = timeline_table(shown)
     styled = table.style.apply(
-        lambda row: [f"background-color: {ui.TEAL_TINT}; font-weight: 600;" if row["Event ID"] == target else ""] * len(row), axis=1)
+        lambda row: [f"background-color: {ui.ACCENT_TINT}; font-weight: 600;" if row["Event ID"] == target else ""] * len(row), axis=1)
     st.caption("Select an event to see its full source record. Novelty flags mean a first appearance since Day 1; "
                "log-offs are not counted as new.")
     event = st.dataframe(styled, hide_index=True, on_select="rerun", selection_mode="single-row",
-                         key=f"timeline_{summary.incident_id}_{choice}", row_height=36,
-                         height=visible_rows * 36 + HEADER_HEIGHT)
+                         key=f"timeline_{summary.incident_id}_{choice}", row_height=ROW_HEIGHT,
+                         height=visible_rows * ROW_HEIGHT + HEADER_HEIGHT)
     if event.selection.rows:
         record = shown.iloc[event.selection.rows[0]]
     else:
@@ -605,7 +605,7 @@ def _record_table(record: pd.Series) -> None:
     if query.strip():
         mask = fields["Field"].str.contains(query, case=False, regex=False) | fields["Value"].str.contains(query, case=False, regex=False)
         fields = fields[mask]
-    st.dataframe(fields, hide_index=True, row_height=34, height=len(fields) * 34 + HEADER_HEIGHT)
+    st.dataframe(fields, hide_index=True, row_height=30, height=len(fields) * 30 + HEADER_HEIGHT)
 
 
 def _host_graph(pairs: pd.DataFrame, limit: int = 16) -> tuple[str, int]:
@@ -616,16 +616,16 @@ def _host_graph(pairs: pd.DataFrame, limit: int = 16) -> tuple[str, int]:
     centre = shown.groupby("Source")["Events"].sum().idxmax() if len(shown) else ""
     lines = [
         "digraph G {",
-        f"  graph [layout=twopi, root=\"{centre}\", ranksep=0.85, overlap=false, bgcolor=transparent, fontname=\"public-sans\"];",
-        f"  node [shape=box, style=\"rounded,filled\", fillcolor=\"#FFFFFF\", color=\"#9FB3B7\", fontname=\"public-sans\","
-        f" fontsize=20, fontcolor=\"{ui.INK}\", margin=\"0.12,0.06\"];",
+        f"  graph [layout=twopi, root=\"{centre}\", ranksep=0.7, overlap=false, bgcolor=transparent, fontname=\"public-sans\"];",
+        f"  node [shape=box, style=\"rounded,filled\", fillcolor=\"#FFFFFF\", color=\"#A3A9B1\", fontname=\"public-sans\","
+        f" fontsize=15, fontcolor=\"{ui.INK}\", margin=\"0.12,0.06\"];",
         f"  \"{centre}\" [fillcolor=\"{ui.SHELL}\", fontcolor=\"#FFFFFF\", color=\"{ui.SHELL}\"];",
-        "  edge [color=\"#9FB3B7\", arrowsize=0.7, penwidth=1.3];",
+        "  edge [color=\"#A3A9B1\", arrowsize=0.7, penwidth=1.3];",
     ]
     is_new = shown[["New destination for user", "New host pair"]].any(axis=1)
     for host in sorted(set(shown.loc[is_new, "Destination"]) - {centre}):
         lines.append(f"  \"{host}\" [color=\"{ui.HIGH}\", penwidth=2, label=<{host}<BR/>"
-                     f"<FONT COLOR=\"{ui.HIGH}\" POINT-SIZE=\"17\"><B>new</B></FONT>>];")
+                     f"<FONT COLOR=\"{ui.HIGH}\" POINT-SIZE=\"13\"><B>new</B></FONT>>];")
     for (_, row), new in zip(shown.iterrows(), is_new):
         attrs = f"color=\"{ui.HIGH}\", penwidth=2.4" if new else ""
         lines.append(f"  \"{row['Source']}\" -> \"{row['Destination']}\" [{attrs}];")
@@ -641,12 +641,12 @@ def _hosts_tab(rows: pd.DataFrame) -> None:
     st.html("<div class='ds-section'>Who connected to what</div>")
     dot, hidden = _host_graph(pairs)
     with st.container(border=True, key="card_host_graph"):
-        st.graphviz_chart(dot, width="stretch", height=600)
+        st.graphviz_chart(dot, width="stretch", height=470)
     st.caption("Red arrows and boxes marked new: the first time this user, or this pair of computers, made the connection. "
                "Records where a computer logs on or off itself are left out."
                + (f" {hidden} known pairs with fewer events are also left out; the table lists every pair." if hidden else ""))
     st.html("<div class='ds-section' style='margin-top:0.6rem'>Source → destination pairs</div>")
-    st.dataframe(pairs, hide_index=True, row_height=36, height=min(len(pairs), 15) * 36 + HEADER_HEIGHT, column_config={
+    st.dataframe(pairs, hide_index=True, row_height=ROW_HEIGHT, height=min(len(pairs), 15) * ROW_HEIGHT + HEADER_HEIGHT, column_config={
         "Events": st.column_config.NumberColumn(width=70),
         "Failures": st.column_config.NumberColumn(width=80),
         "New destination for user": st.column_config.CheckboxColumn(width=180),
@@ -667,7 +667,7 @@ def _evidence_tab(summary: IncidentSummary) -> None:
             "“Why flagged”. The Timeline tab lists them all.</div>")
     context = raw.get("graph_context")
     if context:
-        st.html("<div class='ds-section' style='margin-top:0.9rem'>Graph detector context</div>")
+        st.html("<div class='ds-section' style='margin-top:0.6rem'>Graph detector context</div>")
         st.caption("The graph detector's view of this user's day. The final model does not use it, and the graph team "
                    "inspected days 17–30 during development, so it is context, not an independent result.")
         st.html(ui.facts([("New edges that day", str(context.get("new_edge_count", "—"))),
@@ -727,7 +727,7 @@ def incident_page() -> None:
     position = ids.index(summary.incident_id)
 
     st.html(f"<div class='ds-crumb'>Queue › Day {summary.day} › {ui.mono(summary.incident_id)}</div>")
-    title, buttons = st.columns([4, 1.3], vertical_alignment="bottom")
+    title, buttons = st.columns([4, 1.3], vertical_alignment="center")
     title.title(f"{summary.incident.user_id} — {summary.headline}")
     with buttons.container(horizontal=True, horizontal_alignment="right"):
         if st.button("Previous incident", disabled=position == 0, key="prev_incident"):
