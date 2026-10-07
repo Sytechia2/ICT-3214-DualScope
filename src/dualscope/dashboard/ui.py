@@ -52,6 +52,15 @@ GLOSSARY = {
     "Degree growth": ("Change in how many computers this user connected to, compared with their usual days. "
                       "Negative = fewer than usual."),
     "Edge score": "The graph detector's unusualness score for one user → computer connection. Higher = more unusual.",
+    "Verification": ("Fixed rules check each AI claim against the cited events. No model is involved. "
+                     "Claims that fail are removed and listed separately."),
+    "Supported": "The cited events contain the pattern the technique describes. Consistent with it, not proof of intent.",
+    "Uncertain": ("The cited events match only partly, the specific variant cannot be seen in logon records, "
+                  "or there is no rule for it."),
+    "Rejected": ("Not an active technique, no valid cited event, no authentication-log data source, "
+                 "or the cited events do not match the pattern."),
+    "Partly supported": "Some names or times in the claim are not in the cited events, only elsewhere in the evidence package.",
+    "No supported mapping": "No ATT&CK technique passed verification. A valid result, not an error.",
     "Tied at cut-off": "Whether this alert hour scored exactly the cut-off (MEDIUM).",
 }
 
@@ -141,6 +150,17 @@ h1 {{ letter-spacing: -0.015em; }}
 .ds-callout {{ background: {ACCENT_TINT}; border-radius: 6px; padding: 0.7rem 0.9rem; }}
 .ds-pending {{ text-align: center; color: {MUTED}; padding: 1.1rem 0.6rem; }}
 .ds-pending b {{ display: block; color: {INK}; margin-bottom: 0.3rem; }}
+.ds-badge.supported {{ background: {ACCENT}; color: #FFFFFF; }}
+.ds-badge.uncertain {{ background: #FFFFFF; color: {INK}; border: 1px solid {MUTED}; font-weight: 600; }}
+.ds-badge.rejected {{ background: {PANEL}; color: {MUTED}; border: 1px solid {LINE}; text-decoration: line-through; font-weight: 500; }}
+.ds-claim {{ padding: 0.4rem 0 0.45rem; border-bottom: 1px solid {LINE}; }}
+.ds-claim:last-child {{ border-bottom: 0; }}
+.ds-claim a {{ color: {INK}; text-decoration: none; border-bottom: 1px dotted {MUTED}; }}
+.ds-ref {{ display: inline-block; font-family: "jetbrains-mono", monospace; font-size: 0.8rem; color: {MUTED};
+  background: {PANEL}; border: 1px solid {LINE}; border-radius: 4px; padding: 0 0.35rem; margin: 0.15rem 0.25rem 0 0; }}
+.ds-partly {{ color: {MUTED}; font-size: 0.86rem; cursor: help; white-space: nowrap; }}
+.ds-reasons {{ margin: 0.2rem 0 0; padding-left: 1.1rem; color: {MUTED}; font-size: 0.9rem; }}
+.ds-removed {{ color: {MUTED}; }}
 .ds-candidate {{ display: flex; justify-content: space-between; gap: 0.6rem; align-items: baseline;
   padding: 0.45rem 0; border-bottom: 1px solid {LINE}; }}
 .ds-candidate:last-child {{ border-bottom: 0; }}
@@ -183,6 +203,18 @@ def priority_badge(priority: str) -> str:
 
 def chips(labels: Iterable[str]) -> str:
     return "".join(f'<span class="ds-chip">{escape(label)}</span>' for label in labels)
+
+
+def status_badge(status: str) -> str:
+    """Verification status (Supported / Uncertain / Rejected) with its glossary tooltip."""
+    kind = status.lower() if status.lower() in ("supported", "uncertain", "rejected") else "neutral"
+    hint = escape(GLOSSARY.get(status, ""), quote=True)
+    return f'<span class="ds-badge {kind}" title="{hint}">{escape(status)}</span>'
+
+
+def refs(references: Iterable[str]) -> str:
+    """Evidence references as small mono chips."""
+    return "".join(f'<span class="ds-ref">{escape(str(ref))}</span>' for ref in references)
 
 
 def mono(text: str) -> str:

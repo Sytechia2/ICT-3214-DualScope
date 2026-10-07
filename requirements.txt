@@ -13,3 +13,9 @@ torch>=2.4,<3
 
 # Task 7.1 analyst incident navigation.
 streamlit>=1.55,<2
+
+# Tasks 6.2-6.4 GenAI investigation: Vertex AI REST calls.
+requests>=2.31,<3
+
+# Task 9.5 reviewer label sheets.
+openpyxl>=3.1,<4

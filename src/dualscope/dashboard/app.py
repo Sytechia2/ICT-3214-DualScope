@@ -20,7 +20,7 @@ import pandas as pd
 import streamlit as st
 
 from dualscope.attack.retrieval import TechniqueRetriever
-from dualscope.dashboard import ui
+from dualscope.dashboard import investigation, ui
 from dualscope.dashboard.data import (
     DEFAULT_FIXTURE,
     IncidentDataError,
@@ -835,21 +835,103 @@ def _model_details_tab(summary: IncidentSummary) -> None:
                          column_config={"Edge score (raw)": st.column_config.NumberColumn(help=ui.tip("Edge score"))})
 
 
-def _investigation_tab(summary: IncidentSummary) -> None:
-    left, right = st.columns([1, 1.4], gap="large")
+@st.cache_resource(show_spinner=False)
+def _investigation_views(folder: str, modified: tuple[tuple[str, float], ...]):
+    return investigation.load_run(Path(folder), modified)
+
+
+def _claims_html(items: list[dict], *, confidence: bool = False) -> str:
+    rows = []
+    for item in items:
+        check = item.get("check") or {}
+        mark = ""
+        if check.get("status") == "partly_supported":
+            reasons = "; ".join(check.get("reasons") or []) or "Partly supported"
+            mark = f'<span class="ds-partly" title="{escape(reasons, quote=True)}">◐ partly supported</span>'
+        level = f"<span class='ds-muted'> · {escape(str(item['confidence']))} confidence</span>" if confidence and item.get("confidence") else ""
+        rows.append(f"<div class='ds-claim'>{escape(str(item.get('text', '')))}{level} {mark}"
+                    f"<div>{ui.refs(item.get('evidence') or [])}</div></div>")
+    return "".join(rows)
+
+
+def _inv_list_html(reasons) -> str:
+    items = "".join(f"<li>{escape(str(r))}</li>" for r in reasons or [])
+    return f"<ul class='ds-reasons'>{items}</ul>" if items else ""
+
+
+def _technique_html(item: dict) -> str:
+    technique_id = str(item.get("technique_id", ""))
+    verification = item.get("verification") or {}
+    status = str(item.get("status") or verification.get("status") or "Uncertain")
+    confidence = f"<span class='ds-muted'> · {escape(str(item['confidence']))} confidence</span>" if item.get("confidence") else ""
+    return (f"<div class='ds-claim'>{ui.status_badge(status)}"
+            f"<a href='{escape(investigation.technique_url(technique_id), quote=True)}' target='_blank' rel='noopener'>"
+            f"<b class='ds-mono'>{escape(technique_id)}</b> {escape(str(item.get('name', '')))}</a>{confidence}"
+            f"<div>{escape(str(item.get('rationale', '')))}</div>"
+            f"<div>{ui.refs(item.get('evidence') or [])}</div>"
+            f"{_inv_list_html(verification.get('reasons'))}</div>")
+
+
+def _removed_html(kind: str, item: dict) -> str:
+    if kind == "Technique":
+        return _technique_html(item)
+    check = item.get("check") or {}
+    return (f"<div class='ds-claim ds-removed'><span class='ds-muted'>{escape(kind)}</span> {escape(str(item.get('text', '')))}"
+            f"<div>{ui.refs(item.get('evidence') or [])}</div>{_inv_list_html(check.get('reasons'))}</div>")
+
+
+def _investigation_state(result: investigation.Investigation) -> None:
+    if result.state == investigation.NOT_GENERATED:
+        title, note = "Not generated", "No investigation outputs for this data source."
+    elif result.state == investigation.FAILED:
+        title, note = "Generation failed", "; ".join(result.errors)[:200] or "The model reply could not be used."
+    else:
+        title, note = "Pending", "Not generated for this incident yet."
+    st.html(f"<div class='ds-pending'><b>{escape(title)}</b>{escape(note)}</div>")
+
+
+def _investigation_tab(summary: IncidentSummary, ws: Workspace | None = None) -> None:
+    folder = investigation.DEFAULT_RUN if ws is not None and ws.is_package else None
+    views = _investigation_views(str(folder), tuple(investigation.run_files(folder).items())) if folder else {}
+    mode = st.radio("Investigation view", investigation.MODES, horizontal=True, label_visibility="collapsed",
+                    key="investigation_mode")
+    result = investigation.lookup(views, mode, summary.incident_id)
+    if result.state != investigation.OK or result.verified is None:
+        with st.container(border=True, key="card_inv_state"):
+            _investigation_state(result)
+        return
+    verified = result.verified
+    provenance = " · ".join(p for p in (result.model_version or result.model, result.created_utc) if p)
+    if provenance:
+        st.html(f"<div class='ds-provenance'>{escape(provenance)}</div>")
+    left, right = st.columns([1, 1.2], gap="large")
     with left, st.container(border=True, key="card_inv_summary"):
-        st.html("<div class='ds-section'>Summary</div><div class='ds-pending'><b>No AI summary yet</b>"
-                "Pending Task 6.2</div>")
-    with right:
-        st.html("<div class='ds-section'>ATT&amp;CK candidates</div>")
-        st.caption("MITRE ATT&CK 19.2 · Unverified until Task 6.3")
-        if not summary.candidates:
-            st.info("No candidates")
-        for candidate in summary.candidates:
-            with st.expander(f"{candidate['technique_id']} · {candidate['name']}"):
-                st.html(f"<div>{ui.badge('Unverified')}{ui.badge('Retrieved by: ' + ', '.join(CHIP_LABELS[b] for b in candidate['retrieved_by']))}</div>")
-                st.write(candidate["description"][:700] + ("…" if len(candidate["description"]) > 700 else ""))
-                st.markdown(f"[{candidate['url']}]({candidate['url']})")
+        st.html("<div class='ds-section'>Summary</div>")
+        st.write(verified.get("summary", ""))
+        if verified.get("observations"):
+            st.html("<div class='ds-section' style='margin-top:0.6rem'>Observations</div>"
+                    + _claims_html(verified["observations"]))
+        if verified.get("interpretations"):
+            st.html("<div class='ds-section' style='margin-top:0.6rem'>Interpretations</div>"
+                    + _claims_html(verified["interpretations"], confidence=True))
+        if verified.get("uncertainty"):
+            st.html("<div class='ds-section' style='margin-top:0.6rem'>Uncertainty</div>"
+                    + _inv_list_html(verified["uncertainty"]))
+    with right, st.container(border=True, key="card_inv_attack"):
+        st.html(f"<div class='ds-section'>ATT&amp;CK techniques{ui.tip_html('Verification')}</div>")
+        techniques = verified.get("techniques") or []
+        if techniques:
+            st.html("".join(_technique_html(t) for t in techniques))
+        elif investigation.outcome_of(verified) == "no_supported_mapping":
+            st.html(f"<div class='ds-pending'><b>No supported mapping{ui.tip_html('No supported mapping')}</b>"
+                    "No ATT&amp;CK technique is supported by the cited events.</div>")
+        removed = investigation.removed_items(verified)
+        if removed:
+            with st.expander(f"Removed by verification ({len(removed)})"):
+                st.html("".join(_removed_html(kind, item) for kind, item in removed))
+        if result.retrieved_candidates:
+            shown = ", ".join(result.retrieved_candidates[:6]) + ("…" if len(result.retrieved_candidates) > 6 else "")
+            st.html(f"<div class='ds-muted' style='margin-top:0.5rem'>Retrieved candidates: {escape(shown)}</div>")
 
 
 def _incident_picker(ws: Workspace) -> IncidentSummary | None:
@@ -910,7 +992,7 @@ def incident_page() -> None:
     with tabs[3]:
         _model_details_tab(summary)
     with tabs[4]:
-        _investigation_tab(summary)
+        _investigation_tab(summary, ws)
 
 
 # ─── Evidence page ─────────────────────────────────────────────────────

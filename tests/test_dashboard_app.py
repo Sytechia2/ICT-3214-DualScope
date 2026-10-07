@@ -181,7 +181,7 @@ def test_incident_page_shows_evidence(package: Path) -> None:
     assert "1 first-time connection (1 over NTLM)" in html
     assert "How unusual" in html and "Possible techniques (unverified)" in html
     assert "auth.txt:11" in html and "C1 → C9" in html  # why-flagged example event
-    assert "Unverified" in html and "T1550.002" in html
+    assert "T1550.002" in html and ("Pending" in html or "Not generated" in html)  # no investigation output for this package yet
 
 
 def test_incident_page_deep_link_and_tab(package: Path) -> None:
