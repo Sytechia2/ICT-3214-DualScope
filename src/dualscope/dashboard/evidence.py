@@ -17,6 +17,7 @@ import pandas as pd
 from dualscope.dashboard.data import format_dataset_second
 
 EVENTS_FILE = "events.parquet"
+UNKNOWN = "unknown"  # LANL writes "?" for a missing authentication or logon type
 EVENT_COLUMNS = (
     "source_reference", "timestamp", "source_user", "destination_user", "source_computer",
     "destination_computer", "authentication_type", "logon_type", "authentication_orientation",
@@ -83,8 +84,8 @@ def timeline_table(rows: pd.DataFrame) -> pd.DataFrame:
         "Event ID": rows["source_reference"],
         "Source": rows["source_computer"],
         "Destination": rows["destination_computer"],
-        "Auth type": rows["authentication_type"],
-        "Logon type": rows["logon_type"],
+        "Auth type": rows["authentication_type"].replace("?", UNKNOWN),
+        "Logon type": rows["logon_type"].replace("?", UNKNOWN),
         "Orientation": rows["authentication_orientation"],
         "Result": rows["authentication_result"],
         "Flags": event_flags(rows),
@@ -108,7 +109,7 @@ def host_pair_table(rows: pd.DataFrame) -> pd.DataFrame:
     table = pd.DataFrame({
         "Events": grouped.size(),
         "Failures": grouped["failed"].sum().astype(int),
-        "Auth types": grouped["authentication_type"].agg(lambda s: ", ".join(sorted(set(s)))),
+        "Auth types": grouped["authentication_type"].agg(lambda s: ", ".join(sorted({UNKNOWN if v == "?" else v for v in s}))),
         "New destination for user": grouped["new_destination"].any(),
         "New host pair": grouped["new_pair"].any(),
         "New source for user": grouped["new_source"].any(),

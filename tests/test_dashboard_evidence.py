@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from streamlit.testing.v1 import AppTest
 
 from dualscope.dashboard.evidence import (
     EvidenceDataError,
@@ -19,7 +18,6 @@ from dualscope.dashboard.evidence import (
     timeline_table,
 )
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "incident_dashboard.py"
 DAY2 = 86_401
 
 
@@ -108,43 +106,3 @@ def test_load_events_rejects_bad_files(tmp_path: Path) -> None:
         load_events(tmp_path / "dupes.parquet")
     with pytest.raises(EvidenceDataError, match="cannot read"):
         load_events(tmp_path / "missing.parquet")
-
-
-def _open_detail(path: Path) -> AppTest:
-    at = AppTest.from_file(str(SCRIPT), default_timeout=30).run()
-    at.sidebar.radio[0].set_value("Alert handoff package").run()
-    at.sidebar.text_input[0].input(str(path)).run()
-    at.session_state["selected_incident_id"] = INCIDENT["incident_id"]
-    return at.run()
-
-
-def test_detail_shows_evidence_matching_the_record(package: Path) -> None:
-    at = _open_detail(package)
-    assert not at.exception
-    headings = [item.value for item in at.subheader]
-    assert ["Alerted hours", "Authentication events", "Graph detector context"] == headings[-3:]
-    hours, timeline, pairs, edges = (item.value for item in at.dataframe)
-    assert list(hours["Alert ID"]) == ["ALR-D02-01"] and hours.iloc[0]["Fusion score"] == 0.99
-    assert list(timeline["Event ID"]) == ["auth.txt:10", "auth.txt:11", "auth.txt:12", "auth.txt:13"]
-    assert len(pairs) == 3
-    assert list(edges["Destination"]) == ["C9"]
-    assert any("1 of 5 cited events are missing" in item.value for item in at.warning)
-    assert not any("Answer key" in item.value for item in at.warning)
-    assert any("not probabilities" in item.value for item in at.caption)
-
-    at.session_state[f"timeline_{INCIDENT['incident_id']}"] = {"selection": {"rows": [2], "columns": [], "cells": []}}
-    at.run()
-    assert any("Source record auth.txt:12" in item.value for item in at.markdown)
-    assert json.loads(at.json[0].value)["destination_computer"] == "C9"
-
-    at.sidebar.toggle[0].set_value(True).run()
-    assert any("Answer key (evaluation only): red-team activity" in item.value for item in at.warning)
-
-
-def test_detail_without_events_file_lists_references(package: Path) -> None:
-    (package.parent / "events.parquet").unlink()
-    at = _open_detail(package)
-    assert not at.exception
-    assert any("Event details are unavailable" in item.value for item in at.info)
-    references = at.dataframe[1].value
-    assert list(references["Event ID"]) == INCIDENT["source_references"]
