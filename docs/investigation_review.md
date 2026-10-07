@@ -50,9 +50,15 @@ python scripts/build_review_pack.py
 
 The first writes the committed sample file. The second writes the pack to `outputs/evaluation/review_sample_v1/` (not committed) and fails if any file mentions the answer key or an incident sheet contains an ATT&CK technique ID. It needs `outputs/handoff/final_test_alerts_v1` and `openpyxl`.
 
-## Results (2026-10-07)
+## How the labels were made
 
-TODO (Peter): how the reference labels were produced.
+The first labels came from two separate Claude Sonnet agents (reviewers A and B). Each labelled all 25 incidents on its own, without seeing the other's labels. They worked only from the incident sheets (`outputs/evaluation/review_sample_v1/incidents/`) and the ATT&CK Enterprise 19.2 technique list (`data/reference/attack/enterprise_techniques.json`). They did not see any Gemini output, the 6.1 retrieved candidates, the dashboard's Investigation tab or the answer key. Claude is a different model from the Gemini model being scored, so the scored model is not marking its own work.
+
+The two reviewers agreed on 19 incidents, and those labels were kept as given. Peter decided the other 6. For two of them (`INC-TEST-D21-U8887_DOM1-001` and `INC-TEST-D29-U1179_DOM1-002`) he also checked 30 days of log context: how widely the destination computers are used, and how active each user normally is in a day. He did not use the answer key or any model output. The final labels are in `labels_consensus.xlsx`.
+
+The labels were finished on 2026-10-07, before `scripts/evaluate_investigations.py` was first run on them. The notes column was reworded afterwards without changing any label, and rerunning the scores gave the same results.
+
+## Results (2026-10-07)
 
 The 25 consensus labels hold 8 incidents with an Uncertain technique (T1021 x5, T1078 x2, T1110 x1) and 17 with no supported mapping. There are 0 Supported labels. The labels were recorded before scoring.
 
