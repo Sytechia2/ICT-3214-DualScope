@@ -7,6 +7,7 @@ other dashboard modules, and every value is HTML-escaped before rendering.
 
 from __future__ import annotations
 
+import itertools
 from html import escape
 from typing import Iterable
 
@@ -28,55 +29,72 @@ MEDIUM_INK = "#3B2900"
 
 # One definition per term: hover tooltips (tip, tip_html) and the About page all read from here.
 GLOSSARY = {
-    "Event": "One authentication log line from LANL auth.txt.",
-    "Incident": "One user's flagged hour, or several flagged hours close together. Each row in the queue is one incident.",
-    "Queue": "The 38 user-hours the model scored highest that day.",
-    "Cut-off": "The score of the 38th place in the day's queue.",
-    "HIGH": "Scored above the cut-off. These would be in the queue whatever the tie-break.",
-    "MEDIUM": ("Scored exactly the cut-off. More hours tied than places were left, so a fixed tie-break picked these. "
-               "Their order means nothing."),
-    "Rank": "Position in the day's queue, 1 to 38. Only meaningful for HIGH.",
-    "New": "First time since Day 1 of the dataset. Log-offs never count as new.",
-    "Why-flagged rules": ("Four checks run on each incident's events: failed logons, NTLM logon to a new host, "
-                          "network logon to a new host, logon from a new source computer. "
-                          "They explain the alert; the model itself scores the whole hour."),
-    "No rule matched": "The model ranked the hour highly, but no single event matched one of the four rules.",
-    "Sequence percentile": ("How unusual the user's logon sequence was compared with every other user-hour that day "
-                            "(GRU detector). 99.5% = more unusual than 99.5% of them."),
-    "Fusion score": "The final model's output. Used only to rank hours; it is not an attack probability.",
-    "Graph score": "The graph detector's score for this user's day. Context only; the final model does not use it.",
-    "ATT&CK candidate": ("A MITRE ATT&CK technique whose description matches the behaviour. "
-                         "A lead to check, not a confirmed finding."),
-    "Answer key": "The dataset's red-team labels. For evaluation only; keep it off when triaging.",
-    "New edges": "Computer connections this user made that day for the first time, as counted by the graph detector.",
-    "Degree growth": ("Change in how many computers this user connected to, compared with their usual days. "
-                      "Negative = fewer than usual."),
-    "Edge score": "The graph detector's unusualness score for one user → computer connection. Higher = more unusual.",
-    "Verification": ("Fixed rules check each AI claim against the cited events. No model is involved. "
-                     "Claims that fail are removed and listed separately."),
-    "Supported": "The cited events contain the pattern the technique describes. Consistent with it, not proof of intent.",
-    "Uncertain": ("The cited events match only partly, the specific variant cannot be seen in logon records, "
-                  "or there is no rule for it."),
-    "Rejected": ("Not an active technique, no valid cited event, no authentication-log data source, "
-                 "or the cited events do not match the pattern."),
-    "Partly supported": "Some names or times in the claim are not in the cited events, only elsewhere in the evidence package.",
-    "No supported mapping": "No ATT&CK technique passed verification. A valid result, not an error.",
-    "Tied at cut-off": "Whether this alert hour scored exactly the cut-off (MEDIUM).",
+    "Event": "One line from the login log, such as a sign-in, a sign-out or a ticket request.",
+    "Incident": ("A stretch of unusual activity by one user. It can be a single flagged hour or a few flagged hours "
+                 "close together, and each row in the queue is one incident."),
+    "Queue": "The 38 hours the system found most unusual that day, listed for review.",
+    "Cut-off": "The lowest score that still made it into the day's top 38.",
+    "HIGH": "These scored above the cut-off, so they made the list on their score alone.",
+    "MEDIUM": ("They met the cut-off, but there weren't enough open spots for everyone with that score. "
+               "A tie-breaker decided which ones made the list, and they're in no particular order."),
+    "Rank": ("Where the incident sits in the day's list, with 1 being the most unusual. "
+             "It's only meaningful for HIGH incidents."),
+    "New": "This happened for the first time since the data began on Day 1. Sign-outs are left out.",
+    "Why-flagged rules": ("Four simple checks that point to what stands out: failed logins, an NTLM login to a new computer "
+                          "(NTLM is an older login method attackers like to abuse), a network login to a new computer, "
+                          "and a login from a computer the user hasn't used before. The model ranks the hour on its own, "
+                          "and these checks help explain why."),
+    "No rule matched": "The model found the hour unusual overall, and none of the four checks fired.",
+    "Sequence percentile": ("How unusual this user's run of logins was next to everyone else's that day. "
+                            "At 99.5%, it was more unusual than 99.5% of all other hours."),
+    "Fusion score": "The final model's score, used to sort hours from most to least unusual. Treat it as a ranking only.",
+    "Graph score": ("How unusual this user's whole day of computer connections looked. "
+                    "It's shown for background and has no effect on the ranking."),
+    "ATT&CK candidate": ("A known attacker technique from the MITRE ATT&CK list that matches what happened. "
+                         "Treat it as a lead worth checking."),
+    "Answer key": ("The dataset's real attack labels, kept for testing the system. "
+                   "Leave it switched off while reviewing incidents."),
+    "New edges": "Computers this user connected to for the first time that day.",
+    "Degree growth": ("How many more computers this user connected to than on a normal day. "
+                      "A negative number means fewer."),
+    "Edge score": "How unusual a single user-to-computer connection looks. Higher means more unusual.",
+    "Verification": ("An automatic check that compares the AI's answer with the log lines it points to, using fixed rules "
+                     "with no AI involved. Anything the logs don't back up is removed and listed separately."),
+    "Supported": ("The log lines show the behaviour this technique describes. "
+                  "Whether it was an attack is still for the analyst to decide."),
+    "Uncertain": "The log lines only partly match, or login records don't carry enough detail to confirm it.",
+    "Rejected": ("Removed because the technique doesn't exist, the log lines it points to don't exist, "
+                 "or those lines don't show the behaviour."),
+    "Confidence": ("How sure the AI is about its own explanation.\nLow: one of several possible explanations.\n"
+                   "Medium: it fits, with other explanations still possible.\nHigh: the logs strongly back it up.\n"
+                   "The AI sets this level itself, and the automatic check leaves it alone."),
+    "Partly supported": ("Some computer names or times in this sentence appear elsewhere in the incident "
+                         "and are missing from the log lines it points to."),
+    "No supported mapping": ("None of the known attacker techniques fit this incident. "
+                             "This is a normal outcome and happens often."),
+    "Tied at cut-off": "Ticked when the hour landed exactly on the cut-off score, which makes it MEDIUM.",
 }
+
+CONFIDENCE_MEANING = {"low": "One of several possible explanations.", "medium": "It fits, with other explanations still possible.",
+                      "high": "The logs strongly back it up."}
 
 # Hover text for page elements that are not glossary terms (kept out of the About table).
 TIPS = {
     "Distinct users": "Some users have more than one incident today.",
-    "HIGH vs MEDIUM": ("Each day's 38 incidents: HIGH (above cut-off) up, MEDIUM (tie-break picks) down. "
-                       "Click a day to open it."),
-    "Why flagged chart": GLOSSARY["Why-flagged rules"] + " Click a bar to filter the queue.",
-    "Graph context": ("The graph detector's most unusual connections for this user that day; "
-                      "they may differ from the flagged events."),
+    "HIGH vs MEDIUM": "Each day's 38 incidents, with HIGH shown above the line and MEDIUM below. Click a day to open it.",
+    "Why flagged chart": "How many incidents each of the four checks flagged. Click a bar to show only those incidents.",
+    "Observation timeline": "Each dot is one finding, placed at the time it happened. Click a dot to see its log lines.",
+    "Graph context": "The user's most unusual computer connections that day, which may differ from the flagged events.",
+    "AI modes": ("AI only: the AI reads the incident's log lines and names techniques from what it already knows.\n"
+                 "AI + ATT&CK: it also gets a short list of matching techniques from the MITRE ATT&CK list to choose from.\n"
+                 "AI + ATT&CK, checked: the same answer after the automatic check, "
+                 "with anything the log lines don't back up removed."),
 }
 
 CSS = f"""
 <style>
-:root {{ --ds-accent: {ACCENT}; --ds-line: {LINE}; --ds-muted: {MUTED}; }}
+:root {{ --ds-info-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M12 16v-4'/%3E%3Cpath d='M12 8h.01'/%3E%3C/svg%3E");
+  --ds-accent: {ACCENT}; --ds-line: {LINE}; --ds-muted: {MUTED}; }}
 ::selection {{ background: #DCE0E5; color: {INK}; }}
 html {{ caret-color: {ACCENT}; scrollbar-color: #B8BEC6 transparent; }}
 .block-container {{ padding-top: 2.6rem; padding-bottom: 2rem; padding-left: 1.5rem; padding-right: 1.5rem; max-width: 100%; }}
@@ -170,7 +188,21 @@ h1 {{ letter-spacing: -0.015em; }}
 .ds-legend {{ color: {MUTED}; font-size: 0.86rem; }}
 .ds-swatch {{ display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 2px; vertical-align: -0.1rem;
   margin: 0 0.3rem 0 0.8rem; }}
-.ds-tip {{ color: {MUTED}; cursor: help; font-weight: 400; margin-left: 0.25rem; }}
+.ds-tip {{ display: inline-flex; vertical-align: -0.2em; margin-left: 0.3rem; font-weight: 400; text-transform: none; }}
+.ds-tipbtn {{ background: transparent; border: 0; padding: 1px; margin: 0; color: {MUTED}; cursor: pointer; line-height: 0;
+  border-radius: 50%; display: inline-flex; }}
+.ds-tipbtn::before {{ content: ""; width: 15px; height: 15px; background: currentColor;
+  -webkit-mask: var(--ds-info-icon) center / contain no-repeat; mask: var(--ds-info-icon) center / contain no-repeat; }}
+.ds-tipbtn:hover, .ds-tipbtn:focus-visible, .ds-tip:has(:popover-open) .ds-tipbtn {{ color: {INK}; }}
+.ds-tipbtn:focus-visible {{ outline: 2px solid {ACCENT}; outline-offset: 1px; }}
+.ds-pop {{ position: fixed; inset: auto; margin: 0; max-width: 280px; width: max-content; background: #FFFFFF; color: {INK};
+  border: 1px solid {LINE}; border-radius: 6px; box-shadow: 0 4px 14px rgba(31, 35, 40, 0.14); padding: 0.5rem 0.65rem;
+  font-size: 13px; line-height: 1.4; font-weight: 400; text-align: left; white-space: normal; letter-spacing: 0; }}
+.ds-pop-k {{ font-weight: 650; }}
+.ds-pop b {{ display: block; font-weight: 650; margin-bottom: 0.15rem; }}
+.ds-metric {{ padding: 0.1rem 0.2rem; }}
+.ds-metric span.label {{ display: block; color: {MUTED}; font-size: 0.93rem; }}
+.ds-metric b {{ display: block; font-size: 1.8rem; font-weight: 500; line-height: 1.25; font-variant-numeric: tabular-nums; }}
 .ds-glance {{ display: grid; gap: 0.35rem; }}
 .ds-glance .big b {{ font-size: 2.1rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }}
 .ds-glance .big span, .ds-glance .row span {{ color: {MUTED}; }}
@@ -181,13 +213,58 @@ h1 {{ letter-spacing: -0.015em; }}
 .ds-glance .row.high b, .ds-glance .row.high span {{ color: {HIGH}; font-weight: 650; }}
 .ds-glance .row.medium b, .ds-glance .row.medium span {{ color: #A86E00; font-weight: 650; }}
 .ds-fact {{ padding: 0.3rem 0; }}
-.ds-glance .ds-tip {{ color: {MUTED}; font-weight: 400; }}
 .ds-factline {{ color: {INK}; margin-left: 0.2rem; }}
 .ds-glossary {{ width: 100%; border-collapse: collapse; }}
 .ds-glossary th {{ text-align: left; color: {MUTED}; font-weight: 600; font-size: 0.86rem; padding: 0.4rem 0.8rem 0.4rem 0;
   border-bottom: 1px solid {LINE}; }}
 .ds-glossary td {{ padding: 0.45rem 0.8rem 0.45rem 0; border-bottom: 1px solid {LINE}; vertical-align: top; }}
 .ds-glossary td:first-child {{ font-weight: 600; white-space: nowrap; width: 11rem; }}
+.ds-small {{ font-size: 0.93rem; }}
+.ds-verdict {{ display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem 1.1rem; }}
+.ds-verdict-label {{ font-weight: 650; }}
+.ds-verdict-item {{ white-space: nowrap; }}
+.ds-verdict-item .ds-badge {{ margin-bottom: 0; }}
+.ds-verdict-none {{ font-weight: 600; }}
+.ds-verdict a {{ color: {INK}; text-decoration: none; border-bottom: 1px dotted {MUTED}; }}
+.ds-verdict-note {{ margin-left: auto; font-size: 0.93rem; }}
+[class*="st-key-card_inv_verdict"] {{ padding: 0.55rem 0.9rem; }}
+.ds-inv-summary {{ font-size: 1.07rem; line-height: 1.5; }}
+.ds-context {{ margin-top: 0.6rem; font-size: 0.93rem; }}
+.ds-context > div {{ padding: 0.1rem 0; }}
+.ds-obs {{ line-height: 1.45; padding: 0.15rem 0; }}
+.ds-time {{ font-family: "jetbrains-mono", monospace; font-size: 0.9em; color: {MUTED}; margin-right: 0.6rem; }}
+.ds-chips {{ margin-left: 0.4rem; white-space: nowrap; }}
+.ds-ref.pkg {{ background: none; border-color: transparent; font-family: inherit; font-size: 0.86rem; padding: 0 0.2rem; }}
+.ds-ref.more {{ background: none; border-style: dashed; }}
+.ds-conf {{ display: inline-block; min-width: 3.6rem; text-align: center; margin-right: 0.5rem; padding: 0 0.45rem;
+  border-radius: 999px; background: {PANEL}; border: 1px solid {LINE}; color: {MUTED}; font-size: 0.8rem; }}
+[class*="st-key-inv_row_"] {{ gap: 0.2rem; padding: 0.05rem 0; border-left: 3px solid transparent; }}
+[class*="st-key-inv_row_sel_"] {{ border-left-color: {ACCENT}; background: #F3F4F7; border-radius: 0 6px 6px 0; }}
+[class*="st-key-inv_pick_"] button {{ min-height: 0; min-width: 1.4rem; width: auto; height: 1.4rem; padding: 0 0.35rem; border-radius: 999px;
+  margin-top: 0.1rem; background: #FFFFFF; border: 1.5px solid {ACCENT}; display: flex; align-items: center; justify-content: center; }}
+[class*="st-key-inv_pick_"] button:hover {{ background: {ACCENT_TINT}; }}
+[class*="st-key-inv_row_sel_"] [class*="st-key-inv_pick_"] button {{ background: {ACCENT}; }}
+[class*="st-key-inv_row_sel_"] [class*="st-key-inv_pick_"] button p {{ color: #FFFFFF !important; }}
+[class*="st-key-inv_pick_"] button p {{ font-size: 0.78rem !important; font-weight: 700; line-height: 1; margin: 0 !important; font-variant-numeric: tabular-nums; color: {ACCENT}; }}
+[class*="st-key-inv_pick_"] button div, [class*="st-key-inv_pick_"] button span {{ margin: 0 !important; padding: 0 !important;
+  display: flex; align-items: center; justify-content: center; height: 100%; width: 100%; min-height: 0; }}
+[class*="st-key-inv_row_"] [data-testid="stColumn"]:first-child {{ min-width: 0; }}
+.ds-obs-events {{ padding: 0 0.6rem 0.5rem 3.2rem; overflow-x: auto; }}
+.ds-evt {{ width: 100%; border-collapse: collapse; font-size: 0.86rem; }}
+.ds-evt th {{ text-align: left; color: {MUTED}; font-weight: 600; padding: 0.15rem 0.7rem 0.15rem 0; border-bottom: 1px solid {LINE}; white-space: nowrap; }}
+.ds-evt td {{ padding: 0.15rem 0.7rem 0.15rem 0; border-bottom: 1px solid {LINE}; white-space: nowrap; }}
+.ds-evt td:nth-child(2), .ds-evt td:last-child {{ white-space: normal; }}
+.ds-evt td:last-child {{ min-width: 7rem; }}
+.ds-tech {{ border-bottom: 1px solid {LINE}; padding: 0.4rem 0; }}
+.ds-tech:last-child {{ border-bottom: 0; }}
+.ds-tech summary {{ cursor: pointer; list-style: none; padding-left: 0.1rem; }}
+.ds-tech summary::-webkit-details-marker {{ display: none; }}
+.ds-tech summary::before {{ content: "▸"; color: {MUTED}; margin-right: 0.35rem; }}
+.ds-tech[open] summary::before {{ content: "▾"; }}
+.ds-tech summary a {{ color: {INK}; text-decoration: none; border-bottom: 1px dotted {MUTED}; }}
+.ds-reason-line {{ color: {MUTED}; font-size: 0.9rem; margin: 0.1rem 0 0 1.2rem; }}
+.ds-tech-body {{ margin: 0.4rem 0 0.2rem 1.2rem; overflow-x: auto; }}
+.ds-lbl {{ color: {MUTED}; font-size: 0.86rem; font-weight: 600; margin: 0.45rem 0 0.1rem; }}
 </style>
 """
 
@@ -245,11 +322,67 @@ def tip(term: str) -> str:
     return GLOSSARY[term]
 
 
+_pop_ids = itertools.count(1)
+
+
+_LEAD_WORDS = ("AI + ATT&CK, checked", "AI + ATT&CK", "AI only", "Low", "Medium", "High")
+
+
+def _card_text(text: str) -> str:
+    """Escaped definition with line breaks kept; a leading "Low:" or "AI only:" is bolded."""
+    lines = []
+    for line in text.split("\n"):
+        lead = next((w for w in _LEAD_WORDS if line.startswith(w + ":")), None)
+        if lead:
+            lines.append(f'<span class="ds-pop-k">{escape(lead)}:</span>{escape(line[len(lead) + 1:])}')
+        else:
+            lines.append(escape(line))
+    return "<br>".join(lines)
+
+
 def tip_html(term: str) -> str:
-    """Small ⓘ marker whose hover text is the glossary definition, for st.html headings."""
-    return f'<span class="ds-tip" title="{escape(GLOSSARY.get(term) or TIPS[term], quote=True)}">ⓘ</span>'
+    """Info icon that toggles a small definition card (HTML Popover API), for st.html headings.
+
+    The card is positioned and closed on scroll by POPOVER_SCRIPT, which ``app.run`` loads once per page.
+    """
+    text = GLOSSARY.get(term) or TIPS[term]
+    pop_id = f"dspop-{next(_pop_ids)}"
+    return (f'<span class="ds-tip"><button type="button" class="ds-tipbtn" popovertarget="{pop_id}" '
+            f'aria-label="What is {escape(term, quote=True)}?"></button>'
+            f'<div popover id="{pop_id}" class="ds-pop"><b>{escape(term)}</b>{_card_text(text)}</div></span>')
+
+
+# Installed once per page load (the flag survives Streamlit reruns): place a card beside its icon when it opens,
+# and close open cards when anything scrolls. Light-dismiss, a second click and Esc come from the Popover API.
+POPOVER_SCRIPT = """<script>
+(function () {
+  if (window.__dsPopovers) return;
+  window.__dsPopovers = true;
+  document.addEventListener('toggle', function (e) {
+    var pop = e.target;
+    if (e.newState !== 'open' || !pop.classList || !pop.classList.contains('ds-pop')) return;
+    var btn = document.querySelector('[popovertarget="' + pop.id + '"]');
+    if (!btn) return;
+    var r = btn.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, m = 8;
+    var left = Math.max(m, Math.min(r.left - 4, window.innerWidth - w - m));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - m) top = Math.max(m, r.top - h - 6);
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+  }, true);
+  document.addEventListener('scroll', function (e) {
+    if (e.target && e.target.closest && e.target.closest('.ds-pop')) return;
+    document.querySelectorAll('.ds-pop:popover-open').forEach(function (p) { p.hidePopover(); });
+  }, true);
+})();
+</script>"""
+
+
+def metric_html(label: str, value: str, term: str) -> str:
+    """A metric tile (label with info icon over a value) for places where st.metric's native help icon would be used."""
+    return f"<div class='ds-metric'><span class='label'>{escape(label)}{tip_html(term)}</span><b>{escape(value)}</b></div>"
 
 
 def glossary_table() -> str:
-    rows = "".join(f"<tr><td>{escape(term)}</td><td>{escape(meaning)}</td></tr>" for term, meaning in GLOSSARY.items())
+    rows = "".join(f"<tr><td>{escape(term)}</td><td>{escape(meaning).replace(chr(10), "<br>")}</td></tr>" for term, meaning in GLOSSARY.items())
     return f'<table class="ds-glossary"><thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody>{rows}</tbody></table>'

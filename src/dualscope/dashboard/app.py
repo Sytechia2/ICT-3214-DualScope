@@ -187,7 +187,7 @@ def _first_time_counts(rows: pd.DataFrame) -> tuple[int, int]:
     if rows.empty:
         return 0, 0
     pairs = host_pair_table(rows)
-    new = pairs[pairs[["New destination for user", "New host pair", "New source for user"]].any(axis=1)]
+    new = pairs[pairs[["New destination for user", "First link between these computers", "New source for user"]].any(axis=1)]
     return len(new), int(new["Auth types"].str.contains("NTLM").sum())
 
 
@@ -198,7 +198,7 @@ def _fact_line(summary: IncidentSummary, rows: pd.DataFrame, *, full: bool) -> s
     parts = []
     if full:
         if summary.rank is not None:
-            parts.append(f"Rank {summary.rank} of {QUEUE_SIZE}" if summary.above_cutoff else "tied at cut-off")
+            parts.append(f"Rank {summary.rank} of {QUEUE_SIZE}" if summary.above_cutoff else "MEDIUM: picked by tie-breaker")
         parts += [_hour_range(summary), f"{summary.event_count} log lines"]
         if not rows.empty:
             parts.append(f"{_host_counts(rows)[0]} computers")
@@ -260,7 +260,7 @@ def _host_counts(rows: pd.DataFrame) -> tuple[int, int]:
     if rows.empty:
         return 0, 0
     pairs = host_pair_table(rows)
-    new = pairs[["New destination for user", "New host pair", "New source for user"]].any(axis=1)
+    new = pairs[["New destination for user", "First link between these computers", "New source for user"]].any(axis=1)
     return int(rows["destination_computer"].nunique()), int(new.sum())
 
 
@@ -384,7 +384,7 @@ def _summary_strip(ws: Workspace, day: int, day_summaries: list[IncidentSummary]
         else:
             st.caption("No event data (events.parquet missing).")
     with days.container(border=True, height=240, key="card_queue_by_day"):
-        st.html(f"<div class='ds-section'>HIGH ↑ / MEDIUM ↓ · days 17–30{ui.tip_html('HIGH vs MEDIUM')}</div>")
+        st.html(f"<div class='ds-section'>HIGH and MEDIUM by day · days 17–30{ui.tip_html('HIGH vs MEDIUM')}</div>")
         if counts.empty:
             st.caption("No cut-off data for this source.")
         else:
@@ -558,7 +558,7 @@ def queue_page() -> None:
         selected_id = st.session_state.get("selected_incident_id")
 
         if not visible:
-            st.info("No incidents on this day match the filters. Clear a filter or pick another day.")
+            st.info("Nothing on this day matches your filters.")
         above = [s for s in visible if s.above_cutoff]
         tied = sorted((s for s in visible if not s.above_cutoff), key=lambda s: s.incident.start_time)
         if not ws.is_package:
@@ -634,7 +634,7 @@ def _activity_chart(summary: IncidentSummary, rows: pd.DataFrame, minutes: int) 
 
 def _first_time_pairs(rows: pd.DataFrame) -> pd.DataFrame:
     pairs = host_pair_table(rows)
-    new = pairs[pairs[["New destination for user", "New host pair", "New source for user"]].any(axis=1)]
+    new = pairs[pairs[["New destination for user", "First link between these computers", "New source for user"]].any(axis=1)]
     return pd.DataFrame({
         "Source → destination": new["Source"] + " → " + new["Destination"],
         "Auth type": new["Auth types"],
@@ -681,7 +681,7 @@ def _overview_tab(ws: Workspace, summary: IncidentSummary, rows: pd.DataFrame) -
     with right:
         _unusual_card(summary)
         with st.container(border=True, key="card_candidates"):
-            st.html(f"<div class='ds-section'>Possible techniques (unverified){ui.tip_html('ATT&CK candidate')}</div>"
+            st.html(f"<div class='ds-section'>Possible attacker techniques{ui.tip_html('ATT&CK candidate')}</div>"
                     f"{_candidates_html(summary)}")
 
 
@@ -740,7 +740,7 @@ def _timeline_tab(ws: Workspace, summary: IncidentSummary, rows: pd.DataFrame) -
                                         "Destination": st.column_config.TextColumn(width=85),
                                         "Auth type": st.column_config.TextColumn(width=75),
                                         "Logon type": st.column_config.TextColumn(width=80),
-                                        "Orientation": st.column_config.TextColumn(width=85),
+                                        "Action": st.column_config.TextColumn(width=85),
                                         "Result": st.column_config.TextColumn(width=70),
                                         "Flags": st.column_config.TextColumn(width=380, help=ui.tip("New"))},
                          key=f"timeline_{summary.incident_id}_{choice}", row_height=ROW_HEIGHT,
@@ -769,7 +769,7 @@ def _record_table(record: pd.Series) -> None:
 def _host_graph(pairs: pd.DataFrame, limit: int = 16) -> tuple[str, int]:
     """Radial diagram around the busiest source; self-pairs (local log-on/off records) are left out."""
     remote = pairs[pairs["Source"] != pairs["Destination"]]
-    new = remote[["New destination for user", "New host pair"]].any(axis=1)
+    new = remote[["New destination for user", "First link between these computers"]].any(axis=1)
     shown = pd.concat([remote[new], remote[~new].sort_values("Events", ascending=False).head(max(0, limit - int(new.sum())))])
     centre = shown.groupby("Source")["Events"].sum().idxmax() if len(shown) else ""
     lines = [
@@ -780,7 +780,7 @@ def _host_graph(pairs: pd.DataFrame, limit: int = 16) -> tuple[str, int]:
         f"  \"{centre}\" [fillcolor=\"{ui.SHELL}\", fontcolor=\"#FFFFFF\", color=\"{ui.SHELL}\"];",
         "  edge [color=\"#A3A9B1\", arrowsize=0.7, penwidth=1.3];",
     ]
-    is_new = shown[["New destination for user", "New host pair"]].any(axis=1)
+    is_new = shown[["New destination for user", "First link between these computers"]].any(axis=1)
     for host in sorted(set(shown.loc[is_new, "Destination"]) - {centre}):
         lines.append(f"  \"{host}\" [color=\"{ui.HIGH}\", penwidth=2, label=<{host}<BR/>"
                      f"<FONT COLOR=\"{ui.HIGH}\" POINT-SIZE=\"13\"><B>new</B></FONT>>];")
@@ -806,9 +806,14 @@ def _hosts_tab(rows: pd.DataFrame) -> None:
         "Events": st.column_config.NumberColumn(width=70),
         "Failures": st.column_config.NumberColumn(width=80),
         "New destination for user": st.column_config.CheckboxColumn(width=180, help=ui.tip("New")),
-        "New host pair": st.column_config.CheckboxColumn(width=120, help=ui.tip("New")),
+        "First link between these computers": st.column_config.CheckboxColumn(width=120, help=ui.tip("New")),
         "New source for user": st.column_config.CheckboxColumn(width=160, help=ui.tip("New")),
     })
+
+
+def _metric(column, label: str, term: str, value: str) -> None:
+    """A bordered metric tile whose label carries the popover for glossary ``term``."""
+    column.container(border=True).html(ui.metric_html(label, value, term))
 
 
 def _model_details_tab(summary: IncidentSummary) -> None:
@@ -819,20 +824,20 @@ def _model_details_tab(summary: IncidentSummary) -> None:
                      column_config={"Tied at cut-off": st.column_config.CheckboxColumn(help=ui.tip("Tied at cut-off"))})
     st.html("<div class='ds-section' style='margin-top:0.6rem'>Model scores</div>")
     fusion, graph, _ = st.columns(3)
-    fusion.metric("Fusion score", format_score(summary.incident.max_fused_score), help=ui.tip("Fusion score"), border=True)
-    graph.metric("Graph score", format_score(summary.incident.graph.max_score), help=ui.tip("Graph score"), border=True)
+    _metric(fusion, "Fusion score", "Fusion score", format_score(summary.incident.max_fused_score))
+    _metric(graph, "Graph score", "Graph score", format_score(summary.incident.graph.max_score))
     context = raw.get("graph_context")
     if context:
-        st.html(f"<div class='ds-section' style='margin-top:0.6rem'>Graph detector context{ui.tip_html('Graph context')}</div>")
+        st.html(f"<div class='ds-section' style='margin-top:0.6rem'>Connection pattern that day{ui.tip_html('Graph context')}</div>")
         edges_new, growth, _ = st.columns(3)
-        edges_new.metric("New edges", str(context.get("new_edge_count", "—")), help=ui.tip("New edges"), border=True)
-        growth.metric("Degree growth", str(context.get("degree_growth", "—")), help=ui.tip("Degree growth"), border=True)
+        _metric(edges_new, "New connections", "New edges", str(context.get("new_edge_count", "—")))
+        _metric(growth, "Change in computers reached", "Degree growth", str(context.get("degree_growth", "—")))
         edges = graph_edges_table(raw)
         if edges.empty:
-            st.info("No graph edges for this user-day.")
+            st.info("No connection data for this day.")
         else:
             st.dataframe(edges, hide_index=True,
-                         column_config={"Edge score (raw)": st.column_config.NumberColumn(help=ui.tip("Edge score"))})
+                         column_config={"Connection score": st.column_config.NumberColumn(help=ui.tip("Edge score"))})
 
 
 @st.cache_resource(show_spinner=False)
@@ -840,18 +845,18 @@ def _investigation_views(folder: str, modified: tuple[tuple[str, float], ...]):
     return investigation.load_run(Path(folder), modified)
 
 
-def _claims_html(items: list[dict], *, confidence: bool = False) -> str:
-    rows = []
-    for item in items:
-        check = item.get("check") or {}
-        mark = ""
-        if check.get("status") == "partly_supported":
-            reasons = "; ".join(check.get("reasons") or []) or "Partly supported"
-            mark = f'<span class="ds-partly" title="{escape(reasons, quote=True)}">◐ partly supported</span>'
-        level = f"<span class='ds-muted'> · {escape(str(item['confidence']))} confidence</span>" if confidence and item.get("confidence") else ""
-        rows.append(f"<div class='ds-claim'>{escape(str(item.get('text', '')))}{level} {mark}"
-                    f"<div>{ui.refs(item.get('evidence') or [])}</div></div>")
-    return "".join(rows)
+def _chips_html(refs, ws: Workspace | None) -> str:
+    chips = investigation.evidence_chips(refs, ws.events if ws else None)
+    kinds = {"event": "ds-ref", "package": "ds-ref pkg", "unknown": "ds-ref", "more": "ds-ref more"}
+    return "".join(f"<span class='{kinds[c.kind]}' title='{escape(c.title, quote=True)}'>{escape(c.label)}</span>" for c in chips)
+
+
+def _partly_html(item: dict) -> str:
+    check = item.get("check") or {}
+    if check.get("status") != "partly_supported":
+        return ""
+    reasons = "; ".join(check.get("reasons") or []) or "Partly supported"
+    return f"<span class='ds-partly' title='{escape(reasons, quote=True)}'>◐</span>"
 
 
 def _inv_list_html(reasons) -> str:
@@ -859,79 +864,249 @@ def _inv_list_html(reasons) -> str:
     return f"<ul class='ds-reasons'>{items}</ul>" if items else ""
 
 
-def _technique_html(item: dict) -> str:
+def _events_table_html(ws: Workspace | None, refs, limit: int = 12) -> str:
+    """The cited log lines as a small table: time, route, auth type, logon type, orientation, result, flags."""
+    if ws is None or ws.events is None:
+        return ""
+    cited = [r for r in dict.fromkeys(str(r) for r in refs or []) if investigation.is_event_ref(r)]
+    rows = ws.events.loc[[r for r in cited if r in ws.events.index]]
+    if rows.empty:
+        return "<div class='ds-muted'>No log events found for these references.</div>" if cited else ""
+    rows = rows.sort_values("timestamp")
+    flags = event_flags(rows)
+    body = "".join(
+        f"<tr title='{escape(ref, quote=True)}'><td class='ds-mono'>{investigation.clock(int(row['timestamp']))}</td>"
+        f"<td>{escape(str(row['source_computer']))} → {escape(str(row['destination_computer']))}</td>"
+        f"<td>{escape(str(row['authentication_type']))}</td><td>{escape(str(row['logon_type']))}</td>"
+        f"<td>{escape(str(row['authentication_orientation']))}</td><td>{escape(str(row['authentication_result']))}</td>"
+        f"<td class='ds-muted'>{escape(flags[ref])}</td></tr>"
+        for ref, row in rows.head(limit).iterrows()
+    )
+    more = f"<div class='ds-muted'>+{len(rows) - limit} more events</div>" if len(rows) > limit else ""
+    head = "".join(f"<th>{h}</th>" for h in ("Time", "Source → destination", "Auth type", "Logon type", "Action", "Result", "Flags"))
+    return f"<table class='ds-evt'><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>{more}"
+
+
+def _technique_status(item: dict) -> str:
+    return str(item.get("status") or (item.get("verification") or {}).get("status") or "Uncertain")
+
+
+def _technique_link(item: dict) -> str:
     technique_id = str(item.get("technique_id", ""))
+    return (f"<a href='{escape(investigation.technique_url(technique_id), quote=True)}' target='_blank' rel='noopener'>"
+            f"<b class='ds-mono'>{escape(technique_id)}</b> {escape(str(item.get('name', '')))}</a>")
+
+
+def _technique_html(item: dict, ws: Workspace | None = None) -> str:
+    """One technique as an expandable row: badge, ID and name, first verifier reason; details inside."""
     verification = item.get("verification") or {}
-    status = str(item.get("status") or verification.get("status") or "Uncertain")
-    confidence = f"<span class='ds-muted'> · {escape(str(item['confidence']))} confidence</span>" if item.get("confidence") else ""
-    return (f"<div class='ds-claim'>{ui.status_badge(status)}"
-            f"<a href='{escape(investigation.technique_url(technique_id), quote=True)}' target='_blank' rel='noopener'>"
-            f"<b class='ds-mono'>{escape(technique_id)}</b> {escape(str(item.get('name', '')))}</a>{confidence}"
-            f"<div>{escape(str(item.get('rationale', '')))}</div>"
-            f"<div>{ui.refs(item.get('evidence') or [])}</div>"
-            f"{_inv_list_html(verification.get('reasons'))}</div>")
+    reasons = verification.get("reasons") or []
+    first = f"<div class='ds-reason-line'>{escape(str(reasons[0]))}</div>" if reasons else ""
+    cited = verification.get("cited_events") or item.get("evidence") or []
+    parts = []
+    if item.get("rationale"):
+        level = f" · {escape(str(item['confidence']))} confidence" if item.get("confidence") else ""
+        parts.append(f"<div class='ds-lbl'>AI rationale{level}</div><div>{escape(str(item['rationale']))}</div>")
+    table = _events_table_html(ws, cited)
+    if table:
+        parts.append(f"<div class='ds-lbl'>Cited events</div>{table}")
+    if reasons:
+        parts.append(f"<div class='ds-lbl'>Verifier</div>{_inv_list_html(reasons)}")
+    return (f"<details class='ds-tech'><summary>{ui.status_badge(_technique_status(item))}{_technique_link(item)}{first}</summary>"
+            f"<div class='ds-tech-body'>{''.join(parts)}</div></details>")
 
 
-def _removed_html(kind: str, item: dict) -> str:
+def _removed_html(kind: str, item: dict, ws: Workspace | None = None) -> str:
     if kind == "Technique":
-        return _technique_html(item)
+        return _technique_html(item, ws)
     check = item.get("check") or {}
     return (f"<div class='ds-claim ds-removed'><span class='ds-muted'>{escape(kind)}</span> {escape(str(item.get('text', '')))}"
-            f"<div>{ui.refs(item.get('evidence') or [])}</div>{_inv_list_html(check.get('reasons'))}</div>")
+            f"<div>{_chips_html(item.get('evidence') or [], ws)}</div>{_inv_list_html(check.get('reasons'))}</div>")
 
 
 def _investigation_state(result: investigation.Investigation) -> None:
     if result.state == investigation.NOT_GENERATED:
-        title, note = "Not generated", "No investigation outputs for this data source."
+        title, note = "No AI summary for this data", "No investigation outputs for this data source."
     elif result.state == investigation.FAILED:
-        title, note = "Generation failed", "; ".join(result.errors)[:200] or "The model reply could not be used."
+        title, note = "The AI summary failed", "; ".join(result.errors)[:200] or "The model reply could not be used."
     else:
-        title, note = "Pending", "Not generated for this incident yet."
+        title, note = "No AI summary yet", "Not generated for this incident yet."
     st.html(f"<div class='ds-pending'><b>{escape(title)}</b>{escape(note)}</div>")
+
+
+def _verdict_html(verified: dict) -> str:
+    techniques = investigation.sort_techniques(verified.get("techniques"))
+    if techniques:
+        items = "".join(f"<span class='ds-verdict-item'>{ui.status_badge(_technique_status(t))}{_technique_link(t)}</span>"
+                        for t in techniques)
+    else:
+        items = f"<span class='ds-verdict-none'>No supported mapping{ui.tip_html('No supported mapping')}</span>"
+    removed = len(investigation.removed_items(verified))
+    note = f"<span class='ds-muted ds-verdict-note'>{removed} removed by verification</span>" if removed else ""
+    return (f"<div class='ds-verdict'><span class='ds-verdict-label'>ATT&amp;CK{ui.tip_html('Verification')}</span>"
+            f"{items}{note}</div>")
+
+
+def _pick_dot(chart_key: str, select_key: str) -> None:
+    """Timeline click: select that dot's observation; a click on empty space clears."""
+    state = st.session_state.get(chart_key)
+    picked = state.selection.get("pick") if state is not None else None
+    st.session_state[select_key] = int(picked[0]["first"]) if picked else None
+
+
+def _toggle_observation(select_key: str, number: int) -> None:
+    st.session_state[select_key] = None if st.session_state.get(select_key) == number else number
+    st.session_state["inv_nonce"] = st.session_state.get("inv_nonce", 0) + 1  # a fresh chart can be clicked again
+
+
+def _pill_path(characters: int) -> str:
+    """SVG path of a 20px-high marker: a circle for one character, wider for longer labels like "2–3"."""
+    half = (investigation.marker_width("x" * characters) - 20) / 20  # path units are 10px
+    return f"M{-half},-1 L{half},-1 A1,1 0 0 1 {half},1 L{-half},1 A1,1 0 0 1 {-half},-1 Z"
+
+
+def _inv_timeline_chart(dots: list[investigation.Dot], selected: set[int], lo: int, hi: int) -> alt.Chart:
+    """One numbered dot per observation time across the fitted range; scroll to zoom, drag to pan."""
+    origin = _BASE + timedelta(seconds=(lo - 1) % 86_400)
+    at = lambda seconds: origin + timedelta(seconds=int(seconds - lo))  # noqa: E731
+    frame = pd.DataFrame({
+        "time": [at(d.time) for d in dots], "Observation": [d.label for d in dots],
+        "At": [investigation.clock(d.time) for d in dots], "Text": [d.text for d in dots],
+        "first": [d.numbers[0] for d in dots],
+        "shape": [_pill_path(len(d.label)) for d in dots],
+        "state": ["selected" if selected & set(d.numbers) else "idle" for d in dots],
+        "link": [", ".join(d.techniques[:2]) + (f" +{len(d.techniques) - 2}" if len(d.techniques) > 2 else "") for d in dots],
+    })
+    domain = alt.Scale(domain=[at(lo), at(hi)])
+    axis = alt.Axis(format="%H:%M:%S" if hi - lo < 900 else "%H:%M", labelFontSize=12, labelColor=ui.MUTED, grid=False, tickCount=6,
+                    domain=False, ticks=False, labelPadding=2)
+    x = alt.X("time:T", title=None, scale=domain, axis=axis)
+    tooltip = [alt.Tooltip("Observation:N", title="Observation"), alt.Tooltip("At:N", title="Time"), alt.Tooltip("Text:N", title="")]
+    pick = alt.selection_point(name="pick", fields=["first"], on="click", clear="dblclick")
+    zoom = alt.selection_interval(name="zoom", bind="scales", encodings=["x"])
+    line = (alt.Chart(pd.DataFrame({"a": [at(lo)], "b": [at(hi)]})).mark_rule(color="#A3A9B1", strokeWidth=1.5)
+            .encode(x=alt.X("a:T", scale=domain, title=None, axis=axis), x2="b:T", y=alt.value(34)))
+    state_scale = alt.Scale(domain=["idle", "selected"], range=["#FFFFFF", ui.ACCENT])
+    ink_scale = alt.Scale(domain=["idle", "selected"], range=[ui.ACCENT, "#FFFFFF"])
+    # Every marker is a 20px-high pill (a circle for one digit); merged labels like "2–3" widen it.
+    dots_layer = (alt.Chart(frame).mark_point(filled=True, size=400, cursor="pointer", stroke=ui.ACCENT, strokeWidth=1.5, opacity=1)
+                  .add_params(pick, zoom)
+                  .encode(x=x, y=alt.value(34), shape=alt.Shape("shape:N", scale=None, legend=None),
+                          fill=alt.condition(pick, alt.value(ui.ACCENT), alt.Color("state:N", scale=state_scale, legend=None), empty=False),
+                          tooltip=tooltip))
+    numbers = alt.Chart(frame).mark_text(fontSize=11, fontWeight=700, baseline="middle").encode(
+        x=x, y=alt.value(34), text="Observation:N",
+        color=alt.condition(pick, alt.value("#FFFFFF"), alt.Color("state:N", scale=ink_scale, legend=None), empty=False))
+    layers = [line, dots_layer, numbers]
+    if (frame["link"] != "").any():
+        tagged = frame[frame["link"] != ""].assign(lift=lambda f: [-24 - 13 * (i % 2) for i in range(len(f))])  # stagger neighbours
+        layers.append(alt.Chart(tagged).mark_text(fontSize=10.5, color=ui.MUTED, baseline="bottom")
+                      .encode(x=x, y=alt.value(34), yOffset=alt.YOffset("lift:Q", scale=None), text="link:N"))
+    return alt.layer(*layers).properties(height=82, padding={"left": 8, "right": 14, "top": 14, "bottom": 2}).configure_view(stroke=None)
+
+
+def _inv_timeline(summary: IncidentSummary, dots: list[investigation.Dot], domain: tuple[int, int], key: str,
+                  select_key: str, selected: int | None) -> None:
+    chart_key = f"{key}_{st.session_state.get('inv_nonce', 0)}"
+    state = st.session_state.get(chart_key)
+    picked = state.selection.get("pick") if state is not None else None
+    on_chart = int(picked[0]["first"]) if picked else None
+    chosen = investigation.dot_for(dots, selected)
+    # The chart paints its own clicks; only a selection made elsewhere (a row button) goes into the spec.
+    highlight = set(chosen.numbers) if chosen and chosen.numbers[0] != on_chart else set()
+    window = f"{investigation.clock(summary.incident.start_time)}–{investigation.clock(summary.incident.end_time)}"
+    st.html(f"<div class='ds-section'>Timeline{ui.tip_html('Observation timeline')}"
+            f"<span class='ds-muted ds-small' style='font-weight:400;margin-left:0.6rem'>window {window}</span></div>")
+    st.altair_chart(_inv_timeline_chart(dots, highlight, *domain), width="stretch", key=chart_key,
+                    on_select=functools.partial(_pick_dot, chart_key, select_key), selection_mode="pick")
+
+
+def _observation_rows(ws: Workspace | None, observations: list[investigation.Observation], select_key: str,
+                      selected: int | None) -> None:
+    for obs in observations:
+        chosen = obs.number == selected
+        with st.container(key=f"inv_row_{'sel_' if chosen else ''}{obs.number}"):
+            button, text = st.columns([0.055, 0.945], vertical_alignment="top", gap="small")
+            button.button(str(obs.number), key=f"inv_pick_{obs.number}", type="tertiary",
+                          help="Hide its events" if chosen else "Show its events",
+                          on_click=_toggle_observation, args=(select_key, obs.number))
+            when = investigation.clock(obs.time) if obs.time is not None else "—"
+            text.html(f"<div class='ds-obs'><span class='ds-time'>{when}</span>{escape(obs.text)} {_partly_html(obs.item)}"
+                      f"<span class='ds-chips'>{_chips_html(obs.refs, ws)}</span></div>")
+            if chosen:
+                table = _events_table_html(ws, obs.refs)
+                if table:
+                    st.html(f"<div class='ds-obs-events'>{table}</div>")
 
 
 def _investigation_tab(summary: IncidentSummary, ws: Workspace | None = None) -> None:
     folder = investigation.DEFAULT_RUN if ws is not None and ws.is_package else None
     views = _investigation_views(str(folder), tuple(investigation.run_files(folder).items())) if folder else {}
-    mode = st.radio("Investigation view", investigation.MODES, horizontal=True, label_visibility="collapsed",
-                    key="investigation_mode")
+    mode_col, tip_col, counts_col, provenance_col = st.columns([0.40, 0.03, 0.32, 0.25], vertical_alignment="center")
+    tip_col.html(ui.tip_html("AI modes"))
+    mode = mode_col.radio("Investigation view", investigation.MODES, horizontal=True, label_visibility="collapsed",
+                          key="investigation_mode")
     result = investigation.lookup(views, mode, summary.incident_id)
+    if views:
+        counts_col.html("<div class='ds-muted ds-small'>Techniques: "
+                        f"{escape(investigation.counts_line(investigation.technique_counts(views, summary.incident_id)))}</div>")
     if result.state != investigation.OK or result.verified is None:
         with st.container(border=True, key="card_inv_state"):
             _investigation_state(result)
         return
     verified = result.verified
-    provenance = " · ".join(p for p in (result.model_version or result.model, result.created_utc) if p)
+    provenance = " · ".join(p for p in (result.model_version or result.model, investigation.format_created(result.created_utc)) if p)
     if provenance:
-        st.html(f"<div class='ds-provenance'>{escape(provenance)}</div>")
-    left, right = st.columns([1, 1.2], gap="large")
+        provenance_col.html(f"<div class='ds-muted ds-small' style='text-align:right'>{escape(provenance)}</div>")
+    with st.container(border=True, key="card_inv_verdict"):
+        st.html(_verdict_html(verified))
+
+    events = ws.events if ws is not None else None
+    observations, context = investigation.order_observations(verified.get("observations"), events)
+    times = [o.time for o in observations if o.time is not None]
+    domain = investigation.fit_domain(times, summary.incident.start_time, summary.incident.end_time) if times else (0, 0)
+    dots = investigation.link_techniques(
+        investigation.merge_dots_px(observations, *domain), verified.get("techniques"))
+    key = f"{summary.incident_id}_{mode}"
+    select_key = f"inv_sel_{key}"
+    selected = st.session_state.get(select_key)
+
+    left, right = st.columns([1.5, 1], gap="large")
     with left, st.container(border=True, key="card_inv_summary"):
-        st.html("<div class='ds-section'>Summary</div>")
-        st.write(verified.get("summary", ""))
-        if verified.get("observations"):
-            st.html("<div class='ds-section' style='margin-top:0.6rem'>Observations</div>"
-                    + _claims_html(verified["observations"]))
+        if dots:
+            _inv_timeline(summary, dots, domain, f"inv_chart_{key}", select_key, selected)
+        st.html("<div class='ds-section'>What happened</div>"
+                f"<div class='ds-inv-summary'>{escape(str(verified.get('summary', '')))}</div>")
+        if context:
+            st.html("<div class='ds-context'>" + "".join(
+                f"<div><span class='ds-muted'>Background</span> {escape(str(o.get('text', '')))} "
+                f"<span class='ds-chips'>{_chips_html(o.get('evidence') or [], ws)}</span></div>" for o in context) + "</div>")
+        _observation_rows(ws, observations, select_key, selected)
         if verified.get("interpretations"):
-            st.html("<div class='ds-section' style='margin-top:0.6rem'>Interpretations</div>"
-                    + _claims_html(verified["interpretations"], confidence=True))
+            st.html(f"<div class='ds-section' style='margin-top:0.8rem'>Interpretations{ui.tip_html('Confidence')}</div>" + "".join(
+                f"<div class='ds-claim'><span class='ds-conf' title='"
+                f"{escape(ui.CONFIDENCE_MEANING.get(str(i.get('confidence')), ''), quote=True)}'>{escape(str(i.get('confidence') or '—'))}</span>"
+                f"{escape(str(i.get('text', '')))} {_partly_html(i)}"
+                f"<span class='ds-chips'>{_chips_html(i.get('evidence') or [], ws)}</span></div>"
+                for i in verified["interpretations"]))
         if verified.get("uncertainty"):
-            st.html("<div class='ds-section' style='margin-top:0.6rem'>Uncertainty</div>"
-                    + _inv_list_html(verified["uncertainty"]))
+            with st.expander(f"What the logs can't show ({len(verified['uncertainty'])})"):
+                st.html(_inv_list_html(verified["uncertainty"]))
     with right, st.container(border=True, key="card_inv_attack"):
-        st.html(f"<div class='ds-section'>ATT&amp;CK techniques{ui.tip_html('Verification')}</div>")
-        techniques = verified.get("techniques") or []
+        st.html(f"<div class='ds-section'>Techniques{ui.tip_html('Verification')}</div>")
+        techniques = investigation.sort_techniques(verified.get("techniques"))
         if techniques:
-            st.html("".join(_technique_html(t) for t in techniques))
-        elif investigation.outcome_of(verified) == "no_supported_mapping":
-            st.html(f"<div class='ds-pending'><b>No supported mapping{ui.tip_html('No supported mapping')}</b>"
-                    "No ATT&amp;CK technique is supported by the cited events.</div>")
+            st.html("".join(_technique_html(t, ws) for t in techniques))
+        else:
+            dropped = bool(verified.get("removed_techniques"))
+            st.html(f"<div class='ds-muted'>{'All removed by verification.' if dropped else 'No techniques mapped.'}</div>")
         removed = investigation.removed_items(verified)
         if removed:
             with st.expander(f"Removed by verification ({len(removed)})"):
-                st.html("".join(_removed_html(kind, item) for kind, item in removed))
-        if result.retrieved_candidates:
+                st.html("".join(_removed_html(kind, item, ws) for kind, item in removed))
+        if result.retrieved_candidates and mode != investigation.DIRECT_MODE:
             shown = ", ".join(result.retrieved_candidates[:6]) + ("…" if len(result.retrieved_candidates) > 6 else "")
-            st.html(f"<div class='ds-muted' style='margin-top:0.5rem'>Retrieved candidates: {escape(shown)}</div>")
+            st.html(f"<div class='ds-muted' style='margin-top:0.5rem'>Techniques offered to the AI: {escape(shown)}</div>")
 
 
 def _incident_picker(ws: Workspace) -> IncidentSummary | None:
@@ -1012,7 +1187,7 @@ def evidence_page() -> None:
         st.caption(f"{len(ws.events):,} events · {len(ws.summaries)} incidents")
         return
     if reference not in ws.events.index:
-        st.warning(f"{reference}: not cited by any incident")
+        st.warning(f"{reference}: this log line isn't part of any incident.")
         return
     citing = [s for s in ws.summaries if reference in set(s.incident.raw.get("source_references") or [])]
     left, right = st.columns([1.3, 1], gap="large")
@@ -1069,6 +1244,7 @@ def _pages() -> dict[str, st.Page]:
 def run() -> None:
     st.set_page_config(page_title="DualScope", page_icon=":material/radar:", layout="wide", initial_sidebar_state="auto")
     st.html(ui.CSS)
+    st.html(ui.POPOVER_SCRIPT, unsafe_allow_javascript=True)
     page = st.navigation(list(_pages().values()))
     # Deep links (?incident=<id>&tab=Connections) select an incident once per link.
     link = (st.query_params.get("incident"), st.query_params.get("tab"))
