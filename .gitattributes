@@ -1,0 +1,3 @@
+# Hashed artifacts: keep bytes exactly as committed (no line-ending conversion).
+models/release/** -text
+data/samples/lanl_pipeline_subset/** -text
