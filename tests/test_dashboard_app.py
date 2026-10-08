@@ -128,7 +128,7 @@ def test_queue_page_splits_at_cut_off_and_opens_side_panel(package: Path) -> Non
     assert not at.exception
     assert [t.value for t in at.title] == ["Alert queue"]
     html = _html(at)
-    assert "HIGH · above cut-off" in html and "MEDIUM · tied at cut-off" in html and "Offline package" in html
+    assert "HIGH · above cut-off" in html and "MEDIUM · picked by tie-breaker" in html and "Offline package" in html
     assert "Day 2 at a glance" in html and "Why flagged · Day 2" in html and "HIGH and MEDIUM by day · days 17–30" in html
     assert "distinct users" not in html  # shown only when a user has several incidents
     above, tied = (frame.value for frame in at.dataframe)

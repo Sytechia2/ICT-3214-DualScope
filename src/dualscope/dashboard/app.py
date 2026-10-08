@@ -565,7 +565,7 @@ def queue_page() -> None:
             _queue_group(visible, "queue_all", selected_id, 12, "Incidents", "neutral", ALL_COLUMNS)
         else:
             _queue_group(above, "queue_above", selected_id, 12, "HIGH · above cut-off", "high", HIGH_COLUMNS, "HIGH")
-            _queue_group(tied, "queue_tied", selected_id, 8, "MEDIUM · tied at cut-off", "medium", MEDIUM_COLUMNS, "MEDIUM")
+            _queue_group(tied, "queue_tied", selected_id, 8, "MEDIUM · picked by tie-breaker", "medium", MEDIUM_COLUMNS, "MEDIUM")
     with panel:
         if visible:
             prio = {"HIGH": "high", "CRITICAL": "high", "MEDIUM": "medium"}.get(ws.by_id[selected_id].incident.priority, "none")
@@ -1215,17 +1215,24 @@ def about_page() -> None:
         st.html(ui.glossary_table())
     with notes:
         st.markdown(
-            "**Model**\n"
-            "- Data: LANL enterprise authentication logs, scored per user per hour\n"
-            "- Final model: gradient boosting over a GRU sequence score and hourly counts\n"
-            f"- Queue: top {QUEUE_SIZE} user-hours per day; nearby hours for one user form an incident\n\n"
-            "**Priority**\n"
-            "- HIGH: score above the day's cut-off\n"
-            "- MEDIUM: tied at the cut-off score; picked by a fixed tie-break, so rank order is arbitrary\n\n"
-            "**Test result (days 17–30)**\n"
-            "- Red-team user-hours caught: 1 of 39\n"
-            "- Average precision: 0.00124 (GRU alone: 0.00020)\n"
-            "- Labels come from one red team and are incomplete"
+            "**The data**\n\n"
+            "Login records from the Los Alamos National Laboratory (LANL) company network. "
+            "The system looks at each user one hour at a time.\n\n"
+            "**How hours are scored**\n\n"
+            "A sequence model (GRU) learns each user's usual run of logins and scores how unusual every hour is. "
+            "A second model (gradient boosting) combines that score with simple hourly counts, such as failed logins "
+            "and new computers, into the final score.\n\n"
+            "**The queue**\n\n"
+            f"Each day, the {QUEUE_SIZE} most unusual hours go into the queue. "
+            "Hours from the same user that are close together are grouped into one incident.\n\n"
+            "**Priority**\n\n"
+            "HIGH incidents scored above the day's cut-off. MEDIUM incidents met the cut-off, but there weren't enough "
+            "open spots for everyone with that score, so a tie-breaker decided which ones made the list.\n\n"
+            "**How well it did (days 17–30)**\n\n"
+            "During the test days the red team was active in 39 user-hours, and the queue caught 1 of them. "
+            "Ranked across all hours, the final model scored 0.00124 average precision, compared with 0.00020 "
+            "for the sequence model alone. The red-team labels come from a single exercise and are known to be "
+            "incomplete, so some real attacks may be unlabelled."
         )
 
 
