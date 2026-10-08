@@ -101,3 +101,9 @@ Load labels only from `redteam_labels/labels` for split selection and evaluation
 ## Optional reproduction
 
 The platform-neutral `scripts/ingest_lanl.py` command remains the reproducible ingestion entry point. A parallel reproduction requires extracted `auth.txt` and `redteam.txt`, the Task 2.1 inspection artifact containing exact day byte/row boundaries, PyArrow, and sufficient local storage. Local launch and monitoring wrappers are machine-specific and are intentionally not tracked.
+
+## Gzip input and line maps
+
+`scripts/ingest_lanl.py` accepts `.gz` files for `--auth` and `--redteam` when run with a single worker. Parallel workers (`--workers 2` or more) seek by byte offset and refuse gzip input.
+
+`--line-map <file>` (plain or `.gz`, one integer per line of `--auth`) gives each event the original `auth.txt` line number in `source_line` and `source_reference`, so evidence references stay true when the input is a cut-down file such as `data/samples/lanl_pipeline_subset/auth_subset.txt.gz`. The map must be strictly increasing and have exactly one entry per line of the input, otherwise ingestion stops. A rejected row records the original number as `source_line` and its position in the input file as `physical_line`. Red-team labels always use the line number within the red-team file that was read, so for `redteam_subset.txt` the label references count lines of that small file.

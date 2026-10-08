@@ -27,6 +27,7 @@ logs/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !models/.gitkeep
+!models/release/
 !outputs/.gitkeep
 !logs/.gitkeep
 

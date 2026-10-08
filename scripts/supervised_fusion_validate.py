@@ -30,7 +30,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyarrow.compute as pc
 import pyarrow.dataset as ds
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.inspection import permutation_importance
@@ -43,6 +42,7 @@ _spec = importlib.util.spec_from_file_location("evaluate_sequence_runs", REPO_RO
 _evaluate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_evaluate)
 
+from dualscope.fusion.hourly import COUNTS, INPUTS, hourly_counts, model_inputs  # noqa: E402,F401
 from dualscope.sequence.calibration import average_precision, load_positive_user_hours, unit_labels  # noqa: E402
 from dualscope.splits import SplitConfig  # noqa: E402
 
@@ -50,62 +50,6 @@ from dualscope.splits import SplitConfig  # noqa: E402
 TRAIN_DAYS = range(8, 13)
 EVAL_DAYS = range(13, 17)
 GRU_COLUMN = "A:max_event"
-COUNTS = [
-    "n_events", "n_failures", "n_sources", "n_destinations",
-    "n_new_user_source", "n_new_host_connection", "n_new_user_destination",
-    "n_ntlm", "n_network_logon", "n_logon",
-]
-INPUTS = ["gru_max_event", *COUNTS, "is_machine_account"]
-
-
-def _codes(column) -> tuple[np.ndarray, np.ndarray]:
-    encoded = column.combine_chunks().dictionary_encode()
-    return encoded.indices.to_numpy(zero_copy_only=False), encoded.dictionary.to_numpy(zero_copy_only=False)
-
-
-def hourly_counts(dataset: ds.Dataset, day: int) -> pd.DataFrame:
-    table = dataset.to_table(
-        columns=[
-            "acting_user", "timestamp", "source_computer", "destination_computer", "authentication_type",
-            "logon_type", "authentication_orientation", "authentication_result", "is_new_user_source",
-            "is_new_host_connection", "is_new_user_destination", "is_machine_account",
-        ],
-        filter=ds.field("dataset_day") == day,
-    )
-    user, users = _codes(table["acting_user"])
-    frame = pd.DataFrame({
-        "u": user,
-        "hour": 1 + ((table["timestamp"].to_numpy() - 1) // 3600) * 3600,
-        "src": _codes(table["source_computer"])[0],
-        "dst": _codes(table["destination_computer"])[0],
-        "n_failures": pc.equal(table["authentication_result"], "Fail").to_numpy(),
-        "n_new_user_source": table["is_new_user_source"].to_numpy(),
-        "n_new_host_connection": table["is_new_host_connection"].to_numpy(),
-        "n_new_user_destination": table["is_new_user_destination"].to_numpy(),
-        "n_ntlm": pc.equal(table["authentication_type"], "NTLM").to_numpy(),
-        "n_network_logon": pc.equal(table["logon_type"], "Network").to_numpy(),
-        "n_logon": pc.equal(table["authentication_orientation"], "LogOn").to_numpy(),
-        "is_machine_account": table["is_machine_account"].to_numpy(),
-    })
-    del table
-    frame["either"] = frame["n_new_user_source"] | frame["n_new_host_connection"]
-    flags = ["n_failures", "n_new_user_source", "n_new_host_connection", "n_new_user_destination", "n_ntlm", "n_network_logon", "n_logon", "either"]
-    grouped = frame.groupby(["u", "hour"], sort=False)
-    out = grouped[flags].sum()
-    out["n_events"] = grouped.size()
-    out["is_machine_account"] = grouped["is_machine_account"].max()
-    for column, name in (("src", "n_sources"), ("dst", "n_destinations")):
-        out[name] = frame[["u", "hour", column]].drop_duplicates().groupby(["u", "hour"], sort=False).size()
-    out = out.reset_index()
-    out.insert(0, "user", users[out.pop("u").to_numpy()])
-    out["day"] = day
-    return out
-
-
-def model_inputs(frame: pd.DataFrame) -> np.ndarray:
-    return frame[INPUTS].to_numpy(np.float64)
-
-
 def _log_inputs(x: np.ndarray) -> np.ndarray:
     out = np.log1p(x)
     out[:, 0] = np.log(x[:, 0] + 1e-12)  # GRU score
