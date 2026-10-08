@@ -86,7 +86,7 @@ def timeline_table(rows: pd.DataFrame) -> pd.DataFrame:
         "Destination": rows["destination_computer"],
         "Auth type": rows["authentication_type"].replace("?", UNKNOWN),
         "Logon type": rows["logon_type"].replace("?", UNKNOWN),
-        "Orientation": rows["authentication_orientation"],
+        "Action": rows["authentication_orientation"],
         "Result": rows["authentication_result"],
         "Flags": event_flags(rows),
     })
@@ -97,7 +97,7 @@ def host_pair_table(rows: pd.DataFrame) -> pd.DataFrame:
     if rows.empty:
         return pd.DataFrame(columns=[
             "Source", "Destination", "Events", "Failures", "Auth types",
-            "New destination for user", "New host pair", "New source for user", "First event", "First seen",
+            "New destination for user", "First link between these computers", "New source for user", "First event", "First seen",
         ])
     frame = rows.assign(
         failed=rows["authentication_result"] == "Fail",
@@ -111,12 +111,12 @@ def host_pair_table(rows: pd.DataFrame) -> pd.DataFrame:
         "Failures": grouped["failed"].sum().astype(int),
         "Auth types": grouped["authentication_type"].agg(lambda s: ", ".join(sorted({UNKNOWN if v == "?" else v for v in s}))),
         "New destination for user": grouped["new_destination"].any(),
-        "New host pair": grouped["new_pair"].any(),
+        "First link between these computers": grouped["new_pair"].any(),
         "New source for user": grouped["new_source"].any(),
         "First event": grouped["source_reference"].first(),
         "first": grouped["timestamp"].min(),
     }).reset_index().rename(columns={"source_computer": "Source", "destination_computer": "Destination"})
-    novelty = table[["New destination for user", "New host pair", "New source for user"]].any(axis=1)
+    novelty = table[["New destination for user", "First link between these computers", "New source for user"]].any(axis=1)
     table = table.assign(_novel=novelty).sort_values(["_novel", "first"], ascending=[False, True], kind="stable")
     table["First seen"] = [format_dataset_second(int(t)) for t in table["first"]]
     return table.drop(columns=["_novel", "first"]).reset_index(drop=True)
@@ -148,7 +148,7 @@ def graph_edges_table(incident: Mapping[str, Any]) -> pd.DataFrame:
         {
             "Day": edge["dataset_day"],
             "Destination": edge["destination_computer"],
-            "Edge score (raw)": round(edge["edge_raw_score"], 4),
+            "Connection score": round(edge["edge_raw_score"], 4),
             "New edge": edge["is_new_edge"],
             "Successes": edge["success_count"],
             "Failures": edge["failure_count"],

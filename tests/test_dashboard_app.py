@@ -128,8 +128,8 @@ def test_queue_page_splits_at_cut_off_and_opens_side_panel(package: Path) -> Non
     assert not at.exception
     assert [t.value for t in at.title] == ["Alert queue"]
     html = _html(at)
-    assert "HIGH · above cut-off" in html and "MEDIUM · tied at cut-off" in html and "Offline package" in html
-    assert "Day 2 at a glance" in html and "Why flagged · Day 2" in html and "HIGH ↑ / MEDIUM ↓ · days 17–30" in html
+    assert "HIGH · above cut-off" in html and "MEDIUM · picked by tie-breaker" in html and "Offline package" in html
+    assert "Day 2 at a glance" in html and "Why flagged · Day 2" in html and "HIGH and MEDIUM by day · days 17–30" in html
     assert "distinct users" not in html  # shown only when a user has several incidents
     above, tied = (frame.value for frame in at.dataframe)
     assert list(above["User"]) == ["U1@DOM1"] and list(above["Why flagged"]) == ["NTLM to new host · Failed logons +1"]
@@ -151,7 +151,7 @@ def test_queue_page_splits_at_cut_off_and_opens_side_panel(package: Path) -> Non
     at.button(key="clear_rule").click().run()
     assert len(at.dataframe) == 2
     at.text_input(key="f_search").input("nobody").run()
-    assert any("No incidents on this day match" in item.value for item in at.info)
+    assert any("Nothing on this day matches your filters." in item.value for item in at.info)
 
 
 def test_answer_key_switch_shows_labels(package: Path) -> None:
@@ -179,9 +179,9 @@ def test_incident_page_shows_evidence(package: Path) -> None:
     html = _html(at)
     assert "HIGH" in html and "Rank 1 of 38 · Day 2" in html and "3 log lines" in html
     assert "1 first-time connection (1 over NTLM)" in html
-    assert "How unusual" in html and "Possible techniques (unverified)" in html
+    assert "How unusual" in html and "Possible attacker techniques" in html
     assert "auth.txt:11" in html and "C1 → C9" in html  # why-flagged example event
-    assert "Unverified" in html and "T1550.002" in html
+    assert "T1550.002" in html and ("No AI summary yet" in html or "No AI summary for this data" in html)  # no investigation output for this package yet
 
 
 def test_incident_page_deep_link_and_tab(package: Path) -> None:
@@ -202,14 +202,20 @@ def test_evidence_page_looks_up_an_event(package: Path) -> None:
     assert dict(zip(record["Field"], record["Value"]))["destination_computer"] == "C9"
 
     at = _run_page("evidence", package, evidence_lookup="auth.txt:999")
-    assert any("not cited by any incident" in item.value for item in at.warning)
+    assert any("this log line isn't part of any incident." in item.value for item in at.warning)
 
 
 def test_glossary_feeds_tooltips_and_about_page() -> None:
     from html import escape
 
     from dualscope.dashboard import ui
-    assert ui.tip("New").startswith("First time since Day 1")
-    assert "title=" in ui.tip_html("HIGH") and "ⓘ" in ui.tip_html("HIGH")
+    assert ui.tip("New").startswith("This happened for the first time")
+    html = ui.tip_html("HIGH")
+    assert "popovertarget=" in html and "popover id=" in html and 'aria-label="What is HIGH?"' in html
+    assert escape(ui.GLOSSARY["HIGH"]) in html and "title=" not in html and "ⓘ" not in html
+    assert ui.tip_html("HIGH") != html  # every render gets its own popover id
+    assert ui.TIPS["Distinct users"] in ui.tip_html("Distinct users")  # non-glossary tips use the same card
+    assert "popovertarget" in ui.metric_html("Fusion score", "0.9", "Fusion score") and ">0.9<" in ui.metric_html("Fusion score", "0.9", "Fusion score")
+    assert "__dsPopovers" in ui.POPOVER_SCRIPT and "hidePopover" in ui.POPOVER_SCRIPT
     table = ui.glossary_table()
     assert all(escape(term) in table for term in ui.GLOSSARY)

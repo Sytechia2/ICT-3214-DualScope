@@ -86,6 +86,8 @@ Its top candidates are Pass the Hash and SMB/Windows Admin Shares. It does not f
 
 ## Using it from 6.2
 
+The investigation pipeline that uses this is described in [genai_investigation.md](genai_investigation.md).
+
 ```python
 from dualscope.attack.retrieval import TechniqueRetriever
 from dualscope.attack.queries import retrieve_candidates

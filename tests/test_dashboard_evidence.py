@@ -84,7 +84,7 @@ def test_host_pairs_put_new_relationships_first(package: Path) -> None:
     pairs = host_pair_table(rows)
     assert list(zip(pairs["Source"], pairs["Destination"])) == [("C1", "C9"), ("C1", "C2"), ("C9", "C9")]
     first = pairs.iloc[0]
-    assert (first["Events"], first["New host pair"], first["First event"]) == (1, True, "auth.txt:12")
+    assert (first["Events"], first["First link between these computers"], first["First event"]) == (1, True, "auth.txt:12")
     assert pairs.iloc[1]["Failures"] == 1
     assert not pairs.iloc[2]["New source for user"]  # log-off only
     assert host_pair_table(rows.iloc[0:0]).empty
