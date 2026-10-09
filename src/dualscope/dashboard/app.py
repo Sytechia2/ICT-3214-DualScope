@@ -10,6 +10,8 @@ summary strip and field table); colours and fonts are in .streamlit/config.toml.
 from __future__ import annotations
 
 import functools
+import json
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from html import escape
@@ -57,6 +59,8 @@ HANDOFF_SOURCE = "Alert package (days 17–30)"
 FIXTURE_SOURCE = "Synthetic fixture"
 OTHER_SOURCE = "Other JSONL export"
 QUEUE_SIZE = 38
+ENV_INCIDENTS, ENV_INVESTIGATIONS = "DUALSCOPE_INCIDENTS", "DUALSCOPE_INVESTIGATIONS"
+CUSTOM_SOURCE = "Alert package (this run)"
 TAB_LABELS = ("Overview", "Timeline", "Connections", "Model details", "Investigation")
 TAB_ALIASES = {"Evidence": "Model details", "Hosts": "Connections"}  # older deep links
 _BASE = datetime(2000, 1, 1)  # charts need a date; only the time of day is shown
@@ -94,13 +98,35 @@ def _load(path: str, modified: float, events_modified: float | None):
     return summarise_incidents(incidents, events, _retriever()), events
 
 
+def resolve_paths(incidents: str | Path | None = None, investigations: str | Path | None = None) -> tuple[Path | None, Path | None]:
+    """The incidents file and investigation folder to open: arguments first, then the environment, else None (the defaults)."""
+    incidents = incidents or os.environ.get(ENV_INCIDENTS) or None
+    investigations = investigations or os.environ.get(ENV_INVESTIGATIONS) or None
+    return (Path(incidents).expanduser() if incidents else None, Path(investigations).expanduser() if investigations else None)
+
+
+def _custom_paths() -> tuple[Path | None, Path | None]:
+    return st.session_state.get("_paths", (None, None))
+
+
+def _queue_size() -> int:
+    """Alerts per day of the open package: its manifest's budget when a custom package is open, else 38."""
+    custom, _ = _custom_paths()
+    try:
+        return int(json.loads((custom.parent / "manifest.json").read_text(encoding="utf-8"))["budget_per_day"]) if custom else QUEUE_SIZE
+    except (OSError, ValueError, KeyError, TypeError):
+        return QUEUE_SIZE
+
+
 def _source_controls() -> tuple[str, Path | None]:
-    default = HANDOFF_SOURCE if DEFAULT_HANDOFF.is_file() else FIXTURE_SOURCE
-    options = (HANDOFF_SOURCE, FIXTURE_SOURCE, OTHER_SOURCE)
+    custom, _ = _custom_paths()
+    handoff_label = CUSTOM_SOURCE if custom else HANDOFF_SOURCE
+    default = handoff_label if custom or DEFAULT_HANDOFF.is_file() else FIXTURE_SOURCE
+    options = (handoff_label, FIXTURE_SOURCE, OTHER_SOURCE)
     with st.sidebar.expander("Data source", icon=":material/database:"):
-        source = st.radio("Incident source", options, index=options.index(default), key="source")
-        if source == HANDOFF_SOURCE:
-            return source, DEFAULT_HANDOFF
+        source = st.radio("Incident source", options, index=options.index(default), key="source_custom" if custom else "source")
+        if source == handoff_label:
+            return source, custom or DEFAULT_HANDOFF
         if source == FIXTURE_SOURCE:
             return source, DEFAULT_FIXTURE
         entered = st.text_input("Incident JSONL path", placeholder="outputs/incidents.jsonl", key="source_path")
@@ -128,6 +154,10 @@ def _workspace() -> Workspace | None:
 def _provenance(ws: Workspace) -> str:
     if ws.source == FIXTURE_SOURCE:
         return "Synthetic fixture · demo data"
+    if ws.is_package and ws.source == CUSTOM_SOURCE:
+        days = sorted({1 + (h["window_start"] - 1) // 86_400 for s in ws.summaries for h in s.incident.raw.get("alert_hours") or []})
+        span = f"days {days[0]}–{days[-1]}" if days else "no days"
+        return f"Final model · {span} · {_queue_size()} alerts/day · Offline package"
     if ws.is_package:
         return f"Final model · Test days 17–30 · {QUEUE_SIZE} alerts/day · Offline package"
     return f"{ws.path.name} · Offline export"
@@ -179,7 +209,7 @@ def _rank_text(summary: IncidentSummary) -> str | None:
         return None
     if not summary.above_cutoff:
         return "Tied at cut-off"
-    return f"Rank {summary.rank} of {QUEUE_SIZE} · above cut-off"
+    return f"Rank {summary.rank} of {_queue_size()} · above cut-off"
 
 
 def _first_time_counts(rows: pd.DataFrame) -> tuple[int, int]:
@@ -198,7 +228,7 @@ def _fact_line(summary: IncidentSummary, rows: pd.DataFrame, *, full: bool) -> s
     parts = []
     if full:
         if summary.rank is not None:
-            parts.append(f"Rank {summary.rank} of {QUEUE_SIZE}" if summary.above_cutoff else "MEDIUM: picked by tie-breaker")
+            parts.append(f"Rank {summary.rank} of {_queue_size()}" if summary.above_cutoff else "MEDIUM: picked by tie-breaker")
         parts += [_hour_range(summary), f"{summary.event_count} log lines"]
         if not rows.empty:
             parts.append(f"{_host_counts(rows)[0]} computers")
@@ -367,6 +397,12 @@ def _glance_html(day_summaries: list[IncidentSummary]) -> str:
     )
 
 
+def _day_range(counts: pd.DataFrame) -> str:
+    if counts.empty or _custom_paths()[0] is None:
+        return "days 17–30"
+    return f"days {int(counts['day'].min())}–{int(counts['day'].max())}"
+
+
 def _summary_strip(ws: Workspace, day: int, day_summaries: list[IncidentSummary]) -> None:
     counts = day_cutoff_counts(s.incident for s in ws.summaries)
     glance, why, days = st.columns([0.62, 1.15, 1.35])
@@ -384,7 +420,7 @@ def _summary_strip(ws: Workspace, day: int, day_summaries: list[IncidentSummary]
         else:
             st.caption("No event data (events.parquet missing).")
     with days.container(border=True, height=240, key="card_queue_by_day"):
-        st.html(f"<div class='ds-section'>HIGH and MEDIUM by day · days 17–30{ui.tip_html('HIGH vs MEDIUM')}</div>")
+        st.html(f"<div class='ds-section'>HIGH and MEDIUM by day · {_day_range(counts)}{ui.tip_html('HIGH vs MEDIUM')}</div>")
         if counts.empty:
             st.caption("No cut-off data for this source.")
         else:
@@ -1040,7 +1076,9 @@ def _observation_rows(ws: Workspace | None, observations: list[investigation.Obs
 
 
 def _investigation_tab(summary: IncidentSummary, ws: Workspace | None = None) -> None:
-    folder = investigation.DEFAULT_RUN if ws is not None and ws.is_package else None
+    custom, custom_folder = _custom_paths()
+    default_folder = investigation.DEFAULT_RUN if custom is None else custom_folder  # a custom package never shows the default run's replies
+    folder = default_folder if ws is not None and ws.is_package else None
     views = _investigation_views(str(folder), tuple(investigation.run_files(folder).items())) if folder else {}
     mode_col, tip_col, counts_col, provenance_col = st.columns([0.40, 0.03, 0.32, 0.25], vertical_alignment="center")
     tip_col.html(ui.tip_html("AI modes"))
@@ -1223,7 +1261,7 @@ def about_page() -> None:
             "A second model (gradient boosting) combines that score with simple hourly counts, such as failed logins "
             "and new computers, into the final score.\n\n"
             "**The queue**\n\n"
-            f"Each day, the {QUEUE_SIZE} most unusual hours go into the queue. "
+            f"Each day, the {_queue_size()} most unusual hours go into the queue. "
             "Hours from the same user that are close together are grouped into one incident.\n\n"
             "**Priority**\n\n"
             "HIGH incidents scored above the day's cut-off. MEDIUM incidents met the cut-off, but there weren't enough "
@@ -1248,7 +1286,9 @@ def _pages() -> dict[str, st.Page]:
     }
 
 
-def run() -> None:
+def run(incidents: str | Path | None = None, investigations: str | Path | None = None) -> None:
+    """Open the dashboard. ``incidents`` (an incidents.jsonl) and ``investigations`` (a run folder) replace the defaults;
+    the environment variables DUALSCOPE_INCIDENTS and DUALSCOPE_INVESTIGATIONS do the same when no argument is given."""
     st.set_page_config(page_title="DualScope", page_icon=":material/radar:", layout="wide", initial_sidebar_state="auto")
     st.html(ui.CSS)
     st.html(ui.POPOVER_SCRIPT, unsafe_allow_javascript=True)
@@ -1261,6 +1301,7 @@ def run() -> None:
         tab = TAB_ALIASES.get(link[1], link[1])
         if tab in TAB_LABELS:
             _request_tab(tab)
+    st.session_state["_paths"] = resolve_paths(incidents, investigations)
     st.session_state["_source"] = _source_controls()
     st.sidebar.toggle("Answer key", key="show_answer_key",
                       help="Show red-team labels (evaluation only)")

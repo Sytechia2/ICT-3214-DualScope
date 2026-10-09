@@ -12,6 +12,7 @@ dependencies = []
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
+markers = ["slow: runs the real sample pipeline (about 30 seconds); skip with -m \"not slow\""]
 
 [tool.setuptools.packages.find]
 where = ["src"]

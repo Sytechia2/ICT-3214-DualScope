@@ -219,3 +219,19 @@ def test_glossary_feeds_tooltips_and_about_page() -> None:
     assert "__dsPopovers" in ui.POPOVER_SCRIPT and "hidePopover" in ui.POPOVER_SCRIPT
     table = ui.glossary_table()
     assert all(escape(term) in table for term in ui.GLOSSARY)
+
+
+def test_environment_variables_open_another_package(package: Path, monkeypatch) -> None:
+    from dualscope.dashboard.app import resolve_paths
+
+    assert resolve_paths() == (None, None)
+    monkeypatch.setenv("DUALSCOPE_INCIDENTS", str(package))
+    monkeypatch.setenv("DUALSCOPE_INVESTIGATIONS", str(package.parent / "inv"))
+    assert resolve_paths() == (package, package.parent / "inv")
+    assert resolve_paths("a.jsonl", "b")[0] == Path("a.jsonl")  # an argument wins over the environment
+    (package.parent / "manifest.json").write_text(json.dumps({"budget_per_day": 10}), encoding="utf-8")
+    at = AppTest.from_file(str(SCRIPT), default_timeout=60).run()
+    assert not at.exception
+    html = _html(at)
+    assert "Alert package (this run)" in at.sidebar.radio(key="source_custom").options
+    assert "Rank 1 of 10 · above cut-off" in html and "days 2–2 · 10 alerts/day · Offline package" in html

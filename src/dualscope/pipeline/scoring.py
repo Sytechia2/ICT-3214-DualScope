@@ -112,6 +112,7 @@ def score_days(
     device: str = "cpu",
     log: Callable[[str], None] = print,
     allow_pilot_features: bool = False,
+    timings: dict[str, float] | None = None,
 ) -> pd.DataFrame:
     """Fusion score for every GRU-scorable user-hour of ``days``.
 
@@ -119,13 +120,17 @@ def score_days(
     ``is_machine_account`` and ``fusion``. Rows are in the final test's seed-0
     shuffled order. Raises ``ScoringError`` for any day in 17-30 before loading
     anything. ``device`` moves the release GRU model; see the module docstring
-    for feature builds and ``allow_pilot_features``.
+    for feature builds and ``allow_pilot_features``. If ``timings`` is given
+    it receives ``gru_seconds``, ``count_seconds`` and ``fusion_seconds``.
     """
     days = check_days(days)
     inputs = load_build(features_root, release, splits_config, splits_manifest, feature_config, allow_pilot_features)
     release.gru_model.to(device)
+    started = time.time()
     gru = gru_scores(release, inputs, days, log)
+    gru_done = time.time()
     counts = count_days(features_root, days, log)
+    counts_done = time.time()
     frame = gru.merge(counts, on=["user", "hour", "day"], how="inner", validate="1:1")
     if len(frame) != len(gru):
         raise ScoringError("some GRU-scored user-hours have no events")
@@ -133,6 +138,8 @@ def score_days(
         raise ScoringError("is_machine_account disagrees with the machine-account rule")
     frame = frame.sort_values(["day", "user", "hour"], kind="stable").sample(frac=1.0, random_state=0).reset_index(drop=True)
     frame["fusion"] = release.fusion_model.predict_proba(model_inputs(frame))[:, 1]
+    if timings is not None:
+        timings.update(gru_seconds=gru_done - started, count_seconds=counts_done - gru_done, fusion_seconds=time.time() - counts_done)
     return frame
 
 
