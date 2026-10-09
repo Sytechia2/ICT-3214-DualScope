@@ -55,7 +55,7 @@ The final model is the gradient-boosting fusion of the GRU score and the hourly 
 
 ## Issues found
 
-Mirror these on the GitHub tracker. Owner is Peter (Member 1) for all of them, including the investigation and dashboard items he took over.
+Owner is Peter (Member 1) for all of them, including the investigation and dashboard items he took over.
 
 1. **Investigation script gave unclear errors for damaged input files.** Status: fixed.
    * Reproduce: add a line `{broken` to `incidents.jsonl` of an alert package, or drop a column such as `authentication_result` from `events.parquet`, then run `python scripts/run_investigations.py --handoff-dir <package> --dry-run`.

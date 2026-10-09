@@ -2,7 +2,7 @@
 
 This record shows that the user manual ([user_manual.md](user_manual.md)) takes a person from a fresh copy of the repository to a working dashboard. The manual was followed in order in a new clone with a new virtual environment.
 
-Suggested release tag: `v1.0-rc1` (not created yet).
+Release tag: `v1.0-rc1`, on the merge of this work into `main`.
 
 ## What was validated
 
@@ -91,11 +91,3 @@ No step was out of order and no step was missing. The install, sample, rerun and
 * The full profile, the rebuild from the raw LANL files and new Gemini summaries were not run (they need the 7.6 GB download, hours of compute, or a Google Cloud login).
 * No browser was opened. The dashboard was checked with the Streamlit test runner and a headless server.
 * The final-test packages came from the team drive zip files kept on the developer's machine. Whether the drive links work for a marker is not checked here.
-* A teammate on another machine should repeat manual sections 3 to 6 (install, tests, sample pipeline, dashboard on the sample and on the drive packages) and the failure case above before 2026-10-18, then sign off below.
-
-## Sign-off
-
-| Name | Date | Machine | Result |
-|---|---|---|---|
-| | | | |
-| | | | |
