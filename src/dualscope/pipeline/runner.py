@@ -181,11 +181,11 @@ class PipelineState:
         if path.is_file():
             try:
                 saved = read_json(path)
-                if saved.get("profile") == profile:
+                if isinstance(saved, dict) and saved.get("profile") == profile and isinstance(saved.get("stages"), dict):
                     self.data = saved
                     self.data["run_dir"] = str(run_dir)
             except (OSError, ValueError):
-                pass  # an unreadable state file means every stage runs again
+                pass  # an unreadable or damaged state file means every stage runs again
 
     @property
     def stages(self) -> dict[str, Any]:
@@ -510,6 +510,7 @@ def stage_score(ctx: Context) -> Outcome:
     scores.to_parquet(out / "scores.parquet", index=False)
     summary = {
         "days": days, "user_hours": len(scores), "user_hours_per_day": {str(d): int(n) for d, n in scores["day"].value_counts().sort_index().items()},
+        "user_hours_with_events_but_no_gru_score": scores.attrs.get("unscored_user_hours", {}),
         "release_load_seconds": round(load_seconds, 2), **{k: round(v, 2) for k, v in timings.items()},
         "release_warnings": release.warnings, "device": cfg.get("device", "cpu"),
     }

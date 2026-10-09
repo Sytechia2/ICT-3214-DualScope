@@ -76,6 +76,7 @@ A stage with status `reused` used a verified output that already existed. Reuse 
 * If the `investigate` stage fails (no gcloud, timeouts, replies that are not usable), the runner marks it failed, leaves every earlier output untouched, still runs the dashboard check and exits with a non-zero code. The alerts and their evidence stay viewable. The summary prints the command to resume: `python scripts/run_pipeline.py --profile sample --only investigate --llm`. Generation resumes where it stopped, and failed replies are retried.
 * If any other stage fails, the stages that need it are skipped. The summary names the failed stage and the command to rerun from it with `--from`.
 * A stage that cannot run in this invocation, such as the full-profile investigation without `--llm` and without a complete stored run, is `skipped` with a reason and does not make the run fail.
+* User-hours that have events but no GRU score cannot be queued. The scoring step logs how many there are per day and `scores/scores_summary.json` records them under `user_hours_with_events_but_no_gru_score` (empty for the sample, whose days 8-9 all have a full day of history).
 * Test days are refused. A profile that lists a day from 17 to 30, or an alert split named `test`, stops the runner before any stage starts, and the scoring library refuses them again on its own. Days 17-30 only ever come from the stored one-time test.
 
 ## LLM calls

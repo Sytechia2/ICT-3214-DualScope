@@ -82,6 +82,12 @@ def build_alert_package(
         raise PermissionError("test labels are reserved; build test packages with scripts/export_alert_handoff.py")
     if labels_dir is not None and splits_config is None:
         raise ValueError("splits_config is needed with labels_dir")
+    required = ["user", "day", "hour", "fusion", "gru_max_event", *COUNT_COLUMNS, "is_machine_account"]
+    absent = [column for column in required if column not in scores.columns]
+    if absent:
+        raise ValueError(f"scores is missing columns: {', '.join(absent)}")
+    if scores["fusion"].isna().any():
+        raise ValueError(f"{int(scores['fusion'].isna().sum())} user-hours have no fusion score; they would never reach the queue")
     alerts = select_daily_alerts(scores, budget)
     if alerts.empty:
         raise ValueError("no scored user-hours to build alerts from")

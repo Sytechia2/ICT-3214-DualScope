@@ -122,6 +122,8 @@ def score_days(
     anything. ``device`` moves the release GRU model; see the module docstring
     for feature builds and ``allow_pilot_features``. If ``timings`` is given
     it receives ``gru_seconds``, ``count_seconds`` and ``fusion_seconds``.
+    ``frame.attrs["unscored_user_hours"]`` maps each day to the number of
+    user-hours that had events but no GRU score and so are not in the frame.
     """
     days = check_days(days)
     inputs = load_build(features_root, release, splits_config, splits_manifest, feature_config, allow_pilot_features)
@@ -134,10 +136,16 @@ def score_days(
     frame = gru.merge(counts, on=["user", "hour", "day"], how="inner", validate="1:1")
     if len(frame) != len(gru):
         raise ScoringError("some GRU-scored user-hours have no events")
+    # User-hours with events but no GRU score (not enough history yet) cannot be queued; say how many.
+    unscored = counts.groupby("day").size().sub(frame.groupby("day").size(), fill_value=0).astype(int)
+    unscored = {str(day): int(n) for day, n in unscored.items() if n}
+    if unscored:
+        log(f"  {sum(unscored.values()):,} user-hours with events have no GRU score and are not in the queue: {unscored}")
     if not np.array_equal(is_machine(frame["user"].to_numpy()), frame["is_machine_account"].to_numpy(bool)):
         raise ScoringError("is_machine_account disagrees with the machine-account rule")
     frame = frame.sort_values(["day", "user", "hour"], kind="stable").sample(frac=1.0, random_state=0).reset_index(drop=True)
     frame["fusion"] = release.fusion_model.predict_proba(model_inputs(frame))[:, 1]
+    frame.attrs["unscored_user_hours"] = unscored
     if timings is not None:
         timings.update(gru_seconds=gru_done - started, count_seconds=counts_done - gru_done, fusion_seconds=time.time() - counts_done)
     return frame
