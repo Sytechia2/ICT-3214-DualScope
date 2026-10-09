@@ -12,7 +12,7 @@ Step-by-step instructions are in [docs/user_manual.md](docs/user_manual.md). Tim
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1                 # macOS/Linux: source .venv/bin/activate
 python -m pip install -r requirements.txt      # about 5 minutes (mostly PyTorch)
-python -m pytest -q                            # about 1.6 minutes; add -m "not slow" for about 1 minute
+python -m pytest -q                            # about 1.5 to 2 minutes; add -m "not slow" for about 1 minute
 python scripts/run_pipeline.py --profile sample   # about 45 seconds, peak 0.9 GB, writes outputs/pipeline/sample
 streamlit run scripts/incident_dashboard.py -- --incidents outputs/pipeline/sample/alerts/incidents.jsonl --investigations outputs/pipeline/sample/investigations   # starts in a few seconds
 ```

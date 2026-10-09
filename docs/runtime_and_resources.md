@@ -12,7 +12,7 @@ All times were measured on the development laptop described below unless the las
 |---|---|---|---|---|---|
 | **Setup:** `pip install -r requirements.txt` into a new venv | Python 3.11 to 3.13, internet | 5.5 minutes | low | 1.2 GB venv | Measured |
 | **Smoke check:** `python scripts/smoke_test.py` | Setup only | under 1 second | low | none | Measured |
-| **Tests:** `python -m pytest -q` | Setup only | 1.6 minutes (1.0 minute with `-m "not slow"`) | about 1 GB | none | Measured |
+| **Tests:** `python -m pytest -q` | Setup only | 1.5 to 2.1 minutes (1.0 minute with `-m "not slow"`) | about 1 GB | none | Measured |
 | **Sample pipeline:** `python scripts/run_pipeline.py --profile sample` | Setup only (the 4 MB subset is in the repository) | 35 seconds of stages, about 43 seconds in all; a rerun takes 6.5 seconds | 0.9 GB | 38 MB | Measured, twice |
 | **Dashboard on the sample run** | Sample pipeline done | starts in 1.7 seconds; the first page renders in about 4 seconds | 0.2 to 0.3 GB | none | Measured |
 | **Dashboard on the shared final-test package** | The alert and Gemini folders from the team drive (about 45 MB) | first page renders in about 8 seconds | 0.3 GB | none | Measured |

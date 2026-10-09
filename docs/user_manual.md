@@ -45,7 +45,7 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-If PowerShell refuses to run the activation script, run `Set-ExecutionPolicy -Scope Process RemoteSigned` and try again. If your default `python` is 3.14 or older than 3.11, create the venv with a supported interpreter, for example `py -3.13 -m venv .venv` on Windows.
+If PowerShell refuses to run the activation script, run `Set-ExecutionPolicy -Scope Process RemoteSigned` and try again. If your default `python` is 3.14 or older than 3.11, create the venv with a supported interpreter, for example `py -3.13 -m venv .venv` on Windows. If the `py` launcher is not installed, give the full path of a supported `python.exe` instead, for example `C:\Users\<you>\AppData\Local\Python\pythoncore-3.13-64\python.exe -m venv .venv`.
 
 The install took 5.5 minutes on the development laptop. It is mostly PyTorch. Nothing else has to be installed: the scripts add `src/` to the Python path themselves, and the tests do the same through `pyproject.toml`, so `pip install -e .` is not needed. Run every command from the repository root.
 
@@ -62,11 +62,11 @@ It should end with `Smoke check passed.`
 ## 4. Run the tests
 
 ```powershell
-python -m pytest -q                  # all tests, about 1.6 minutes
+python -m pytest -q                  # all tests, about 1.5 to 2 minutes
 python -m pytest -q -m "not slow"    # skips the one test that runs the sample pipeline, about 1 minute
 ```
 
-Expect all tests to pass with one skipped (`CUDA is not available`, which is normal on a machine without an NVIDIA GPU). pytest may print a warning that it could not write its cache; this is harmless.
+Expect all tests to pass. On a fresh copy two tests are skipped: one that needs the sample run of section 5 (`run the sample profile first`) and one that needs a GPU (`CUDA is not available`, which is normal on a machine without an NVIDIA GPU). After section 5 only the GPU test is skipped. The first run in a new venv can take up to about 2 minutes. pytest may print a warning that it could not write its cache; this is harmless.
 
 ## 5. Run the sample pipeline
 
@@ -89,6 +89,8 @@ dashboard    done    0.6      881
 
 All selected stages finished.
 ```
+
+The score stage prints `release warning: torch ... is installed; the release was made with 2.11.0+cu128`. This is expected: the packages are installed at their newest allowed versions and the scores are computed on the CPU. The run still finishes, and the stored model files pass their hash check.
 
 The last lines of the output give the command that opens the dashboard on this run. Running the same command again skips every stage that is up to date (about 7 seconds). Use `--force` to run everything again, or `--from features` to start at one stage. Details are in [pipeline_runner.md](pipeline_runner.md).
 
