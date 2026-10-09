@@ -82,9 +82,18 @@ def sha256(path: Path) -> str:
 
 
 def read_jsonl(path: Path) -> list[dict]:
+    """The records of a JSONL file; a bad line stops the run with the file and line number."""
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    records = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"{path} line {number} is not valid JSON ({exc.msg}); fix or remove it and run again") from exc
+    return records
 
 
 def write_jsonl(path: Path, records: list[dict]) -> None:
@@ -100,8 +109,20 @@ def latest_by_incident(records: list[dict]) -> dict[str, dict]:
     return {record["incident_id"]: record for record in records}
 
 
+REQUIRED_EVENT_COLUMNS = (
+    "source_reference", "timestamp", "source_user", "destination_user", "source_computer", "destination_computer",
+    "authentication_type", "logon_type", "authentication_orientation", "authentication_result",
+    "is_new_user_source", "is_new_host_connection", "is_new_user_destination", "alert_id",
+)
+
+
 def load_inputs(handoff: Path, wanted: list[str] | None, limit: int | None):
-    incidents = {record["incident_id"]: record for record in read_jsonl(handoff / "incidents.jsonl")}
+    incidents = {}
+    for number, record in enumerate(read_jsonl(handoff / "incidents.jsonl"), start=1):
+        missing = [key for key in ("incident_id", "user_id", "start_time", "end_time") if not isinstance(record, dict) or key not in record]
+        if missing:
+            raise SystemExit(f"{handoff / 'incidents.jsonl'} line {number} is missing {', '.join(missing)}")
+        incidents[record["incident_id"]] = record
     ids = sorted(incidents)
     if wanted:
         unknown = sorted(set(wanted) - set(incidents))
@@ -111,7 +132,11 @@ def load_inputs(handoff: Path, wanted: list[str] | None, limit: int | None):
     if limit:
         ids = ids[:limit]
     alerts = pd.read_parquet(handoff / "alerts.parquet", columns=["alert_id", "incident_id"])
-    events = pd.read_parquet(handoff / "events.parquet").merge(alerts, on="alert_id", validate="m:1")
+    events = pd.read_parquet(handoff / "events.parquet")
+    absent = [column for column in REQUIRED_EVENT_COLUMNS if column not in events.columns]
+    if absent:
+        raise SystemExit(f"{handoff / 'events.parquet'} is missing columns: {', '.join(absent)}")
+    events = events.merge(alerts, on="alert_id", validate="m:1")
     events = events[events["incident_id"].isin(ids)]
     return incidents, ids, dict(tuple(events.groupby("incident_id", sort=True)))
 

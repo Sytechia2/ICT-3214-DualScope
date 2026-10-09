@@ -39,6 +39,9 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from dualscope.handoff.alerts import (  # noqa: E402
     COUNT_COLUMNS,
+    EVENT_COLUMNS,  # noqa: F401
+    GRAPH_COLUMNS,
+    alert_events,
     FUSION_METHOD,
     HOUR_SECONDS,
     PRIORITY_ABOVE_CUTOFF,
@@ -51,45 +54,12 @@ from dualscope.handoff.alerts import (  # noqa: E402
 from dualscope.sequence.calibration import load_positive_user_hours  # noqa: E402
 from dualscope.splits import SplitConfig  # noqa: E402
 
-EVENT_COLUMNS = [
-    "source_reference", "source_line", "timestamp", "acting_user", "source_user", "destination_user",
-    "source_computer", "destination_computer", "authentication_type", "logon_type",
-    "authentication_orientation", "authentication_result", "is_new_user_source",
-    "is_new_host_connection", "is_new_user_destination", "prior_auth_count_1h",
-    "prior_failure_count_1h", "prior_unique_destinations_24h",
-]
-GRAPH_COLUMNS = [
-    "user_id", "dataset_day", "status", "score", "is_alert", "alert_threshold", "n_edges",
-    "new_edge_count", "prior_degree", "current_degree", "degree_growth", "evidence_nodes", "top_edges",
-]
-
-
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def alert_events(dataset: ds.Dataset, alerts: pd.DataFrame) -> pd.DataFrame:
-    parts = []
-    for day, rows in alerts.groupby("day", sort=True):
-        started = time.time()
-        table = dataset.to_table(
-            columns=EVENT_COLUMNS,
-            filter=(ds.field("dataset_day") == int(day)) & ds.field("acting_user").isin(sorted(set(rows["user"]))),
-        )
-        events = table.to_pandas()
-        events["window_start"] = 1 + ((events["timestamp"] - 1) // HOUR_SECONDS) * HOUR_SECONDS
-        events = events.merge(
-            rows[["user", "window_start", "alert_id"]].rename(columns={"user": "acting_user"}),
-            on=["acting_user", "window_start"], how="inner", validate="m:1",
-        )
-        parts.append(events.drop(columns=["window_start"]))
-        print(f"  events: day {day}, {len(events):,} rows ({time.time() - started:.0f}s)")
-    events = pd.concat(parts, ignore_index=True)
-    return events.sort_values(["alert_id", "timestamp", "source_line"], kind="stable").reset_index(drop=True)
 
 
 def main() -> int:

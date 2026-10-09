@@ -277,3 +277,22 @@ def test_pixel_aware_merge() -> None:
     wide = investigation.merge_dots_px(numbered, BASE - 10_000, BASE + 10_000, 600)
     assert [d.numbers for d in wide] == [(1, 2, 3, 4, 5)]  # a very long range packs everything into one marker
     assert [d.numbers for d in investigation.merge_dots_px(numbered, BASE, BASE + 70, 6000)] == [(1,), (2,), (3,), (4,), (5,)]
+
+
+def test_custom_folder_overrides_the_default_run(package: Path, run: Path, tmp_path: Path) -> None:
+    other = tmp_path / "other_run"
+    other.mkdir()
+    _write(other / "rag_verified.jsonl", [_record(INC, "rag_verified", status="failed", errors=["custom run reply"])])
+    at = _run_page("incident", package, selected=INC, _paths=(package, other))
+    assert not at.exception and "custom run reply" in _html(at) and "U1 logged on to a new host." not in _html(at)
+    at = _run_page("incident", package, selected=INC, _paths=(package, None))  # a custom package never shows the default run
+    assert not at.exception and "No AI summary for this data" in _html(at)
+
+
+def test_dry_run_folder_reads_as_not_generated(package: Path, run: Path, tmp_path: Path) -> None:
+    dry = tmp_path / "dry"
+    (dry / "dry_run").mkdir(parents=True)
+    (dry / "dry_run" / "packages.jsonl").write_text("{}\n", encoding="utf-8")
+    assert investigation.load_run(dry) == {}
+    at = _run_page("incident", package, selected=INC, _paths=(package, dry))
+    assert not at.exception and "No AI summary for this data" in _html(at)

@@ -34,6 +34,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from dualscope.fusion.hourly import is_machine  # noqa: E402,F401
 from dualscope.sequence.calibration import (  # noqa: E402
     average_precision,
     evaluation_summary,
@@ -62,10 +63,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--units-output", type=Path, help="Also write per-unit raw scores (parquet), one column per variant:aggregation")
     parser.add_argument("--allow-pilot-features", action="store_true")
     return parser.parse_args()
-
-
-def is_machine(users: np.ndarray) -> np.ndarray:
-    return np.fromiter((str(u).split("@", 1)[0].endswith("$") for u in users), dtype=bool, count=len(users))
 
 
 def budget_metrics(frame: pd.DataFrame, score: str, budget: int, positives_total: int) -> dict:

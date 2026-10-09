@@ -12,10 +12,12 @@ and a stable sort on it breaks score ties exactly as the test did.
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+import time
+from typing import Any, Callable, Iterable
 
 import numpy as np
 import pandas as pd
+import pyarrow.dataset as ds
 
 HOUR_SECONDS = 3_600
 COUNT_COLUMNS = [
@@ -27,6 +29,17 @@ COUNT_COLUMNS = [
 PRIORITY_ABOVE_CUTOFF = "HIGH"
 PRIORITY_TIED_AT_CUTOFF = "MEDIUM"
 FUSION_METHOD = "supervised_hist_gradient_boosting"
+EVENT_COLUMNS = [
+    "source_reference", "source_line", "timestamp", "acting_user", "source_user", "destination_user",
+    "source_computer", "destination_computer", "authentication_type", "logon_type",
+    "authentication_orientation", "authentication_result", "is_new_user_source",
+    "is_new_host_connection", "is_new_user_destination", "prior_auth_count_1h",
+    "prior_failure_count_1h", "prior_unique_destinations_24h",
+]
+GRAPH_COLUMNS = [
+    "user_id", "dataset_day", "status", "score", "is_alert", "alert_threshold", "n_edges",
+    "new_edge_count", "prior_degree", "current_degree", "degree_growth", "evidence_nodes", "top_edges",
+]
 
 
 def clean_user(user: str) -> str:
@@ -56,11 +69,11 @@ def select_daily_alerts(scores: pd.DataFrame, budget: int = 38) -> pd.DataFrame:
     return top.reset_index(drop=True)
 
 
-def group_incidents(alerts: pd.DataFrame, max_gap_seconds: int = 7_200) -> pd.Series:
+def group_incidents(alerts: pd.DataFrame, max_gap_seconds: int = 7_200, id_prefix: str = "INC-TEST") -> pd.Series:
     """Incident ID for each alert: one user's alert hours with gaps up to ``max_gap_seconds``.
 
     The gap rule matches ``IncidentConfig.max_merge_gap_seconds`` (Task 5.4).
-    IDs follow the Task 5.4 pattern ``INC-TEST-D<first day>-<user>-<seq>``.
+    IDs follow the Task 5.4 pattern ``<id_prefix>-D<first day>-<user>-<seq>``.
     """
     incident_ids = pd.Series(index=alerts.index, dtype=object)
     for user, rows in alerts.sort_values("window_start").groupby("user", sort=True):
@@ -70,10 +83,31 @@ def group_incidents(alerts: pd.DataFrame, max_gap_seconds: int = 7_200) -> pd.Se
         for index, row in rows.iterrows():
             if previous_end is None or row["window_start"] - previous_end > max_gap_seconds:
                 sequence += 1
-                current_id = f"INC-TEST-D{int(row['day']):02d}-{clean_user(user)}-{sequence:03d}"
+                current_id = f"{id_prefix}-D{int(row['day']):02d}-{clean_user(user)}-{sequence:03d}"
             incident_ids[index] = current_id
             previous_end = int(row["window_end"])
     return incident_ids
+
+
+def alert_events(dataset: ds.Dataset, alerts: pd.DataFrame, log: Callable[[str], None] = print) -> pd.DataFrame:
+    """Every authentication event behind each alert, tagged with its ``alert_id`` (sorted by alert, time, line)."""
+    parts = []
+    for day, rows in alerts.groupby("day", sort=True):
+        started = time.time()
+        table = dataset.to_table(
+            columns=EVENT_COLUMNS,
+            filter=(ds.field("dataset_day") == int(day)) & ds.field("acting_user").isin(sorted(set(rows["user"]))),
+        )
+        events = table.to_pandas()
+        events["window_start"] = 1 + ((events["timestamp"] - 1) // HOUR_SECONDS) * HOUR_SECONDS
+        events = events.merge(
+            rows[["user", "window_start", "alert_id"]].rename(columns={"user": "acting_user"}),
+            on=["acting_user", "window_start"], how="inner", validate="m:1",
+        )
+        parts.append(events.drop(columns=["window_start"]))
+        log(f"  events: day {day}, {len(events):,} rows ({time.time() - started:.0f}s)")
+    events = pd.concat(parts, ignore_index=True)
+    return events.sort_values(["alert_id", "timestamp", "source_line"], kind="stable").reset_index(drop=True)
 
 
 def _graph_summary(graph_rows: pd.DataFrame) -> dict[str, Any]:
@@ -107,6 +141,7 @@ def build_incident_records(
     alerts: pd.DataFrame,
     events: pd.DataFrame,
     graph: pd.DataFrame | None = None,
+    split: str = "test",
 ) -> list[dict[str, Any]]:
     """One JSON-ready record per incident, in the Task 5.4 / dashboard field layout.
 
@@ -114,6 +149,7 @@ def build_incident_records(
     ``events`` has one row per contributing event with ``alert_id`` and
     ``source_reference``; ``graph`` holds graph-detector rows keyed by
     ``user_id`` and ``dataset_day`` (context only: the final model does not use it).
+    ``split`` is written to each record's ``split`` field.
     """
     references = (
         events.sort_values(["timestamp", "source_reference"], kind="stable")
@@ -155,7 +191,7 @@ def build_incident_records(
             "duration_seconds": end - start,
             "duration_hours": int(np.ceil((end - start) / HOUR_SECONDS)),
             "dataset_day": days[0],
-            "split": "test",
+            "split": split,
             "priority": PRIORITY_ABOVE_CUTOFF if (~rows["tied_at_cutoff"]).any() else PRIORITY_TIED_AT_CUTOFF,
             "best_rank_in_day": int(rows["rank_in_day"].min()),
             "max_fused_score": float(rows["fusion"].max()),

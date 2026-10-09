@@ -98,8 +98,8 @@ def load_run(folder: Path, modified: tuple[tuple[str, float], ...] = ()) -> dict
 
     ``modified`` is unused; callers pass it so a cache keyed on file times refreshes.
     """
-    if not folder.is_dir():
-        return {}
+    if not folder.is_dir() or not any(t for t in run_files(folder).values()):
+        return {}  # no generated or verified files, for example after a dry run
     views: dict[str, dict[str, Investigation]] = {
         VERIFIED_MODE: {r["incident_id"]: _from_record(r) for r in read_jsonl(folder / "rag_verified.jsonl")}
     }

@@ -19,3 +19,6 @@ requests>=2.31,<3
 
 # Task 9.5 reviewer label sheets.
 openpyxl>=3.1,<4
+
+# Task 8.1 pipeline runner: peak memory of stages and their child processes.
+psutil>=5.9,<8

@@ -1,0 +1,143 @@
+{
+  "feature_version": "2.0.0",
+  "feature_name": "lanl_historical_features_v2",
+  "feature_config_fingerprint": "22f6cc09cd0726e6e49db13e183086bf098446e7de3cbf3650ac37f3251373fb",
+  "split_policy_fingerprint": "c5e3d5d89c0324b24ca79f391abfec197f47f89fd9ddb3f7652f4fe5a1284af9",
+  "mode": "production",
+  "is_production": true,
+  "is_frozen": true,
+  "missing_gap_placeholder": 0.0,
+  "fitting_row_counts": {
+    "total_scanned_rows": 508854306,
+    "training_scanned_rows": 113699496,
+    "training_eligible_fitted_rows": 113666837,
+    "training_excluded_skipped_rows": 32659,
+    "validation_scanned_rows": 164299768,
+    "test_scanned_rows": 230855042
+  },
+  "numeric_stats": {
+    "prior_auth_count_1h": {
+      "count": 113666837,
+      "mean": 4.903068765939763,
+      "std": 2.095777808395663,
+      "scale": 2.095777808395663,
+      "is_constant": false
+    },
+    "prior_failure_count_1h": {
+      "count": 113666837,
+      "mean": 0.25304870872536855,
+      "std": 1.0334801483169942,
+      "scale": 1.0334801483169942,
+      "is_constant": false
+    },
+    "seconds_since_previous_auth": {
+      "count": 113614152,
+      "mean": 1.7057750338668927,
+      "std": 1.9388235384811938,
+      "scale": 1.9388235384811938,
+      "is_constant": false
+    },
+    "prior_unique_destinations_24h": {
+      "count": 113666837,
+      "mean": 2.417502662396111,
+      "std": 0.693540691447592,
+      "scale": 0.693540691447592,
+      "is_constant": false
+    },
+    "prior_user_destination_count_24h": {
+      "count": 113666837,
+      "mean": 6.075585077296531,
+      "std": 2.6537348606685085,
+      "scale": 2.6537348606685085,
+      "is_constant": false
+    }
+  },
+  "categorical_vocabularies": {
+    "authentication_type": {
+      "column_name": "authentication_type",
+      "unseen_token": "<UNSEEN>",
+      "unseen_id": 0,
+      "missing_token": "<MISSING>",
+      "missing_id": 1,
+      "training_distinct_categories": 20,
+      "category_to_id": {
+        "?": 2,
+        "Kerberos": 3,
+        "MICROSOFT_AUTHENTICA": 4,
+        "MICROSOFT_AUTHENTICATI": 5,
+        "MICROSOFT_AUTHENTICATION_PA": 6,
+        "MICROSOFT_AUTHENTICATION_PAC": 7,
+        "MICROSOFT_AUTHENTICATION_PACK": 8,
+        "MICROSOFT_AUTHENTICATION_PACKA": 9,
+        "MICROSOFT_AUTHENTICATION_PACKAG": 10,
+        "MICROSOFT_AUTHENTICATION_PACKAGE": 11,
+        "MICROSOFT_AUTHENTICATION_PACKAGE_": 12,
+        "MICROSOFT_AUTHENTICATION_PACKAGE_V": 13,
+        "MICROSOFT_AUTHENTICATION_PACKAGE_V1": 14,
+        "MICROSOFT_AUTHENTICATION_PACKAGE_V1_": 15,
+        "MICROSOFT_AUTHENTICATION_PACKAGE_V1_0": 16,
+        "NETWARE_AUTHENTICATION_PACKAGE_V1_0": 17,
+        "NTLM": 18,
+        "Negotiate": 19,
+        "Setuid": 20,
+        "Wave": 21
+      }
+    },
+    "logon_type": {
+      "column_name": "logon_type",
+      "unseen_token": "<UNSEEN>",
+      "unseen_id": 0,
+      "missing_token": "<MISSING>",
+      "missing_id": 1,
+      "training_distinct_categories": 10,
+      "category_to_id": {
+        "?": 2,
+        "Batch": 3,
+        "CachedInteractive": 4,
+        "Interactive": 5,
+        "Network": 6,
+        "NetworkCleartext": 7,
+        "NewCredentials": 8,
+        "RemoteInteractive": 9,
+        "Service": 10,
+        "Unlock": 11
+      }
+    },
+    "authentication_orientation": {
+      "column_name": "authentication_orientation",
+      "unseen_token": "<UNSEEN>",
+      "unseen_id": 0,
+      "missing_token": "<MISSING>",
+      "missing_id": 1,
+      "training_distinct_categories": 7,
+      "category_to_id": {
+        "AuthMap": 2,
+        "LogOff": 3,
+        "LogOn": 4,
+        "ScreenLock": 5,
+        "ScreenUnlock": 6,
+        "TGS": 7,
+        "TGT": 8
+      }
+    },
+    "authentication_result": {
+      "column_name": "authentication_result",
+      "unseen_token": "<UNSEEN>",
+      "unseen_id": 0,
+      "missing_token": "<MISSING>",
+      "missing_id": 1,
+      "training_distinct_categories": 2,
+      "category_to_id": {
+        "Fail": 2,
+        "Success": 3
+      }
+    }
+  },
+  "rules": {
+    "counts_transformation": "log1p(count) followed by standard scaling (x - mean) / scale",
+    "seconds_since_previous_auth_fitting": "nulls excluded from training statistics fitting",
+    "seconds_since_previous_auth_transform": "log1p(gap) standardized; missing gap assigned missing_gap_placeholder (0.0) post-scaling",
+    "categorical_encoding": "0 = UNSEEN, 1 = MISSING, 2+ = sorted training categories",
+    "constant_feature_handling": "scale = 1.0 when std < 1e-12"
+  }
+}

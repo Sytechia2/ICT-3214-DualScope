@@ -129,10 +129,14 @@ class GeminiClient:
                 last_error = f"{type(exc).__name__}: {exc}"
             else:
                 if response.status_code == 200:
-                    return _parse_response(response.json(), time.time() - started, attempt)
-                last_error = f"HTTP {response.status_code}: {response.text[:300]}"
-                if response.status_code not in RETRY_STATUS and response.status_code != 401:
-                    break
+                    try:
+                        return _parse_response(response.json(), time.time() - started, attempt)
+                    except (ValueError, AttributeError, TypeError) as exc:  # a proxy page or a changed reply format
+                        last_error = f"unreadable HTTP 200 response ({type(exc).__name__}): {response.text[:200]}"
+                else:
+                    last_error = f"HTTP {response.status_code}: {response.text[:300]}"
+                    if response.status_code not in RETRY_STATUS and response.status_code != 401:
+                        break
             if attempt < self.config.max_attempts:
                 time.sleep(min(60, 2 ** attempt))
         raise GenerationError(last_error)
