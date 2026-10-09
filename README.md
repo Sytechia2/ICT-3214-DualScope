@@ -4,6 +4,21 @@ Multi-timescale intrusion detection using sequence and graph-based behavioural a
 
 The work plan (WBS and detailed task guide) is kept outside the repository; task numbers below follow it. The scope checklist is [docs/scope_checklist.md](docs/scope_checklist.md) and environment setup is [docs/environment_setup.md](docs/environment_setup.md).
 
+## Quick start
+
+Step-by-step instructions are in [docs/user_manual.md](docs/user_manual.md). Times and resource needs for every run are in [docs/runtime_and_resources.md](docs/runtime_and_resources.md). Needs Python 3.11 to 3.13; no GPU, no LANL download and no credentials.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1                 # macOS/Linux: source .venv/bin/activate
+python -m pip install -r requirements.txt      # about 5 minutes (mostly PyTorch)
+python -m pytest -q                            # about 1.6 minutes; add -m "not slow" for about 1 minute
+python scripts/run_pipeline.py --profile sample   # about 45 seconds, peak 0.9 GB, writes outputs/pipeline/sample
+streamlit run scripts/incident_dashboard.py -- --incidents outputs/pipeline/sample/alerts/incidents.jsonl --investigations outputs/pipeline/sample/investigations   # starts in a few seconds
+```
+
+The full pipeline (`--profile full`) reuses stored outputs and takes about 8 minutes on a machine that holds them; rebuilding from the raw LANL files takes 4 to 7 hours. Making new AI summaries (`--llm`) needs a Google Cloud login. Both are optional.
+
 ## Current status (2026-10-06)
 
 ### Headline result
@@ -30,7 +45,8 @@ The model ranks attacks much better than the GRU on unseen days, but at 38 alert
 - **Fusion and incidents (5.1–5.4):** alignment, maximum/average/temporal fusion and incident records with signature tagging and evidence.
 - **Evaluation (9.1–9.4):** protocol ([evaluation_protocol.md](docs/evaluation_protocol.md)); comparison of all detectors and fusions on Days 13–16 at the same budget ([model_comparison_matrix.md](docs/model_comparison_matrix.md)); detection timing, precedence and errors with data-driven case studies ([detection_timing_and_errors.md](docs/detection_timing_and_errors.md)); the final model and test ([supervised_fusion.md](docs/supervised_fusion.md), full record in [experiment_features_v2.md](docs/experiment_features_v2.md)). The flat-feature Isolation Forest baseline (9.2) is the weakest detector: 0 of 136 attack hours on Days 13–16 and 0 of 39 on Days 17–30 at 38 alerts/day.
 - **End-to-end runner (8.1):** `python scripts/run_pipeline.py --profile sample` takes the tracked subset in `data/samples/lanl_pipeline_subset` through ingestion, features, scoring with the frozen release model in `models/release`, alerts, investigation evidence and a dashboard check; `--profile full` reproduces the run of record and reuses verified outputs. See [docs/pipeline_runner.md](docs/pipeline_runner.md).
-- **Not yet in the repository:** the ATT&CK retrieval and LLM investigation component (6.x), the dashboard beyond a mock UI (7.x) and investigation reliability evaluation (9.5).
+- **GenAI investigation, dashboard and reliability review (6.x, 7.x, 9.5):** ATT&CK retrieval, Gemini summaries with an automatic evidence check, the analyst dashboard and the reviewer sample are in the repository. See [docs/genai_investigation.md](docs/genai_investigation.md), [docs/attack_retrieval.md](docs/attack_retrieval.md), [docs/investigation_review.md](docs/investigation_review.md) and the dashboard section below.
+- **Runtime and user manual (8.3, 8.4):** [docs/runtime_and_resources.md](docs/runtime_and_resources.md) and [docs/user_manual.md](docs/user_manual.md).
 
 Large data, feature builds, model checkpoints, scores and logs are not stored in Git; each guide says where they come from or how to rebuild them.
 

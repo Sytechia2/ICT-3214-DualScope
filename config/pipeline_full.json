@@ -52,7 +52,7 @@
   "ingest": {
     "auth": "dataset/auth.txt.gz",
     "redteam": "dataset/redteam.txt.gz",
-    "inspection": "outputs/lanl_auth_inspection.json",
+    "inspection": "data/manifests/lanl_auth_inspection.json",
     "day_start": 1,
     "day_end": 30,
     "workers": 4,
