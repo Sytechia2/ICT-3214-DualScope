@@ -5,6 +5,7 @@ pandas>=2.2,<3
 pyarrow>=17,<22
 scikit-learn>=1.5,<2
 networkx>=3.3,<4
+matplotlib>=3.9,<4
 PyYAML>=6.0,<7
 pytest>=8,<9
 # Sequence detector (Tasks 3.1-3.4): GRU autoencoder training and inference.
