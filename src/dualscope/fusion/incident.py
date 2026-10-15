@@ -47,9 +47,15 @@ class IncidentRecord:
     graph_evidence_nodes: list[str]
     evidence_count: int
 
+    # Signature rule match fields (Task 5.4 rule layer)
+    is_rule_based_signature: bool = False
+    rule_matches: list[str] = field(default_factory=list)
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["priority"] = self.priority.value
+        data["is_rule_based_signature"] = self.is_rule_based_signature
+        data["rule_matches"] = list(self.rule_matches)
         return data
 
     def to_json(self) -> str:
@@ -75,6 +81,8 @@ INCIDENT_RECORD_SCHEMA = pa.schema(
         pa.field("evidence_chunk_references", pa.list_(pa.string()), nullable=False),
         pa.field("graph_evidence_nodes", pa.list_(pa.string()), nullable=False),
         pa.field("evidence_count", pa.int32(), nullable=False),
+        pa.field("is_rule_based_signature", pa.bool_(), nullable=False),
+        pa.field("rule_matches", pa.list_(pa.string()), nullable=False),
     ]
 )
 
@@ -82,8 +90,13 @@ INCIDENT_RECORD_SCHEMA = pa.schema(
 class IncidentClusterer:
     """Clusters consecutive or closely spaced anomalous user-hours into incident records."""
 
-    def __init__(self, config: IncidentConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: IncidentConfig | None = None,
+        known_signatures: Any | None = None,
+    ) -> None:
         self.config = config or IncidentConfig()
+        self.known_signatures = known_signatures
 
     def _determine_priority(
         self,
@@ -134,12 +147,6 @@ class IncidentClusterer:
             concordance = "normal"
 
         has_boost = any(r.temporal_boost > 0.0 for r in group_rows)
-        priority = self._determine_priority(max_score, has_concordant, has_boost)
-
-        # Build clean incident identifier
-        clean_user = user_id.replace("@", "_").replace("$", "")
-        split_prefix = split.upper() if split else "LIVE"
-        incident_id = f"INC-{split_prefix}-D{day:02d}-{clean_user}-{incident_seq:03d}"
 
         # Aggregate evidence references
         raw_source_lines: list[int] = []
@@ -171,6 +178,43 @@ class IncidentClusterer:
             if ref not in seen_chunk:
                 seen_chunk.add(ref)
                 ordered_chunk_refs.append(ref)
+
+        # Signature / known-attack rule matching (Task 5.4 rule layer)
+        matched_rules: list[str] = []
+        if self.known_signatures is not None:
+            if callable(self.known_signatures):
+                matched_rules = list(self.known_signatures(user_id, group_rows))
+            elif hasattr(self.known_signatures, "triples"):
+                th_triples = self.known_signatures.triples
+                for u, s, d in th_triples:
+                    if u == user_id:
+                        if not graph_nodes or d in graph_nodes:
+                            matched_rules.append(f"threat_triple:{u}:{s}->{d}")
+            elif isinstance(self.known_signatures, (set, frozenset, list, tuple)):
+                sig_set = set(self.known_signatures)
+                if user_id in sig_set:
+                    matched_rules.append(f"signature_user:{user_id}")
+                for node in sorted(graph_nodes):
+                    if node in sig_set:
+                        matched_rules.append(f"signature_node:{node}")
+                    if (user_id, node) in sig_set:
+                        matched_rules.append(f"signature_pair:{user_id}->{node}")
+                for item in sig_set:
+                    if isinstance(item, tuple) and len(item) == 3:
+                        u, s, d = item
+                        if u == user_id and (not graph_nodes or d in graph_nodes):
+                            matched_rules.append(f"threat_triple:{u}:{s}->{d}")
+
+        is_signature = len(matched_rules) > 0
+        if is_signature:
+            priority = IncidentPriority.CRITICAL
+        else:
+            priority = self._determine_priority(max_score, has_concordant, has_boost)
+
+        # Build clean incident identifier
+        clean_user = user_id.replace("@", "_").replace("$", "")
+        split_prefix = split.upper() if split else "LIVE"
+        incident_id = f"INC-{split_prefix}-D{day:02d}-{clean_user}-{incident_seq:03d}"
 
         # Detect lead detector
         lead_dets = [r.lead_detector for r in group_rows if r.lead_detector]
@@ -216,6 +260,8 @@ class IncidentClusterer:
             evidence_chunk_references=ordered_chunk_refs,
             graph_evidence_nodes=sorted(graph_nodes),
             evidence_count=len(ordered_sources),
+            is_rule_based_signature=is_signature,
+            rule_matches=matched_rules,
         )
 
     def cluster_incidents(

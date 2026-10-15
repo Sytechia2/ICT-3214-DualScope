@@ -1,41 +1,54 @@
 # DualScope
 
-Multi-timescale intrusion detection using sequence and graph-based behavioural analysis.
+Multi-timescale intrusion detection using sequence and graph-based behavioural analysis, on the LANL authentication dataset.
 
-This repository is being built from the shared workplans in:
+The work plan (WBS and detailed task guide) is kept outside the repository; task numbers below follow it. The scope checklist is [docs/scope_checklist.md](docs/scope_checklist.md) and environment setup is [docs/environment_setup.md](docs/environment_setup.md).
 
-- [DualScope WBS](DualScope_WBS.md)
-- [Detailed task implementation guide](DualScope_Detailed_Tasks.md)
-- [Scope and deliverables checklist](docs/scope_checklist.md)
-- [Development environment setup](docs/environment_setup.md)
+## Quick start
 
-## Current status
+Step-by-step instructions are in [docs/user_manual.md](docs/user_manual.md). Times and resource needs for every run are in [docs/runtime_and_resources.md](docs/runtime_and_resources.md). Needs Python 3.11 to 3.13; no GPU, no LANL download and no credentials.
 
-Tasks 3.1–3.4, the short-term sequence detector, are implemented and frozen:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1                 # macOS/Linux: source .venv/bin/activate
+python -m pip install -r requirements.txt      # about 5 minutes (mostly PyTorch)
+python -m pytest -q                            # about 1.5 to 2 minutes; add -m "not slow" for about 1 minute
+python scripts/run_pipeline.py --profile sample   # about 45 seconds, peak 0.9 GB, writes outputs/pipeline/sample
+streamlit run scripts/incident_dashboard.py -- --incidents outputs/pipeline/sample/alerts/incidents.jsonl --investigations outputs/pipeline/sample/investigations   # starts in a few seconds
+```
 
-- **3.1 Sequences:** 11,846,723 acting-user/hour sequences, with zero boundary violations and Day 1 marked as warm-up.
-- **3.2 Models:** six GRU sequence autoencoders trained on 2,238,183 eligible training user-hours.
-- **3.3 Selection:** the settings were chosen on validation data only.
-- **3.4 Export:** calibrated 0–1 user-hour scores with explicit statuses and retrievable `auth.txt` evidence were exported for Days 1–30.
+The full pipeline (`--profile full`) reuses stored outputs and takes about 8 minutes on a machine that holds them; rebuilding from the raw LANL files takes 4 to 7 hours. Making new AI summaries (`--llm`) needs a Google Cloud login. Both are optional.
 
-The selected model (`seq-gru-ae-v1-L32-h32-91e4b11d34`) reaches validation average precision 0.0060 (102× the 5.9 × 10⁻⁵ prevalence) and ROC-AUC 0.88. At its max-F1 threshold it gives 37.8 alerts per day with 3.2% precision and 5.0% recall. These are weak standalone user-hour results, reported as found. Test labels were not used.
+## Current status (2026-10-06)
 
-The detector was fitted on a production run of the Task 2.4 pipeline (all 508,854,306 events reconciled). Checkpoints and full scores are shared outside Git. See [the sequence detector guide](docs/sequence_detector.md), [the downstream handoff](docs/sequence_detector_handoff.md), and the [sequence](data/manifests/lanl_sequences_v1.json) and [selection](data/manifests/sequence_detector_v1.json) manifests.
+### Headline result
 
-Task 2.4 shared historical features are implemented. The streaming two-pass pipeline preserves `source_reference` in raw and transformed feature rows. A documented representative pilot processed and reconciled 15.8 million real authentication events; the full 30-day feature output is a separate run and has not been produced. See [the feature guide](docs/lanl_features.md) and [its manifest](data/manifests/lanl_features_v1.json).
+The final detection model is a **supervised fusion** (gradient boosting on the GRU score and hourly authentication counts), fitted on validation labels and tested once on Days 17–30. See [docs/supervised_fusion.md](docs/supervised_fusion.md).
 
-Task 2.5 evidence lookup and provenance helpers are implemented. `AuthenticationEvidenceLookup` resolves accepted `auth.txt:<source_line>` references to normalized events and their retained raw record; carrier helpers attach ordered references to sequence and graph evidence and support paging. The checked-in sample demonstrates end-to-end tracing, but it is synthetic sample data rather than a real detector incident. See [the evidence guide](docs/evidence_references.md).
+| Days 13–16 (validation, 136 attack hours) | Caught at 38 alerts/day | AP |
+| --- | ---: | ---: |
+| GRU alone | 4 | 0.0046 |
+| Final model | 16 (13–18 under numeric noise) | 0.050 |
 
-The chronological data split policy established for Task 2.3, including training compromise exclusions, replay boundaries and evaluation units, is:
-- **Training (Days 1–7, `[1, 604801)`)**: 113,699,496 events. Excludes seven red-team users (`32,659` events, 0.0287%) appearing in training compromise labels, leaving `113,666,837` eligible events (99.9713%) for normal model fitting, learned vocabularies, and scalers. Eligible training events are presumed normal background and are not guaranteed benign.
-- **Validation (Days 8–16, `[604801, 1382401)`)**: 164,299,768 events, 640 label rows / 614 unique labels (600 matched, 14 unmatched). Used for model tuning, threshold selection, and fusion calibration.
-- **Test (Days 17–30, `[1382401, 2592001)`)**: 230,855,042 events, 60 label rows / 52 unique labels. Evaluated strictly using frozen model checkpoints and calibration parameters.
+| Days 17–30 (test, run once, 39 attack hours) | Caught at 38 alerts/day | AP |
+| --- | ---: | ---: |
+| GRU alone | 0 | 0.00020 |
+| Final model | 1 | 0.00124 |
 
-The machine-readable split specification is in [the split configuration](config/lanl_splits.json), the verified totals and provenance are recorded in [the splits manifest](data/manifests/lanl_splits_v1.json), and the developer usage guide is in [the splits documentation](docs/lanl_splits.md).
+The model ranks attacks much better than the GRU on unseen days, but at 38 alerts per day it catches almost none of the test-period attacks; its pre-set primary success rule was not met.
 
-Task 2.2 normalisation is complete. The selected Days 1–30 source was normalised into 508,854,306 authentication events and 749 separately stored red-team labels, with zero rejected rows and exact count reconciliation. The local result is a 9.48 GiB, day-partitioned Zstandard Parquet dataset ready to share through the team's large-file storage. The event contract, completed-run record and loading example are in [the LANL ingestion guide](docs/lanl_ingestion.md). A small processed sample remains tracked for interface development without the full dataset.
+### By work package
 
-Task 1.1 foundation files are present; independent second-member setup verification has not yet been recorded. For Task 2.1, the inspected LANL authentication source has 1,051,430,459 records across 58 days. The initial source window is Days 1–30, retaining all 749 supplied red-team rows while reducing authentication input to 508,854,306 records. The selection rules, counts and limitations are recorded in [the dataset manifest](data/manifests/lanl_auth_days_01_30.json). Red-team labels remain separate from detector inputs, and authentication records without a matching label are unlabelled rather than proven benign. Full LANL data, trained models, generated outputs and credentials are not stored in Git.
+- **Data (2.1–2.5):** Days 1–30 of LANL authentication, 508,854,306 events and 749 red-team label rows, normalised with exact reconciliation; chronological split into training (Days 1–7), validation (Days 8–16) and test (Days 17–30); shared causal historical features; `auth.txt:<line>` evidence references throughout. See [lanl_ingestion.md](docs/lanl_ingestion.md), [lanl_splits.md](docs/lanl_splits.md), [lanl_features.md](docs/lanl_features.md), [evidence_references.md](docs/evidence_references.md).
+- **Short-term sequence detector (3.1–3.4):** GRU autoencoder over user-hour event sequences, frozen; validation AP 0.0060 (102× prevalence), ROC-AUC 0.88. See [sequence_detector.md](docs/sequence_detector.md) and [sequence_detector_handoff.md](docs/sequence_detector_handoff.md).
+- **Long-term graph detector (4.1–4.4):** graph autoencoder over daily user–computer graphs, plus a separate confirmed-relationship signature layer. Its reported test-period results (GAE F1 0.077; signature layer F1 0.84) are retrospective, because the test days had been inspected during development. See [graph_detector.md](docs/graph_detector.md), [graph_model_evaluation.md](docs/graph_model_evaluation.md), [graph_detector_handoff.md](docs/graph_detector_handoff.md).
+- **Fusion and incidents (5.1–5.4):** alignment, maximum/average/temporal fusion and incident records with signature tagging and evidence.
+- **Evaluation (9.1–9.4):** protocol ([evaluation_protocol.md](docs/evaluation_protocol.md)); comparison of all detectors and fusions on Days 13–16 at the same budget ([model_comparison_matrix.md](docs/model_comparison_matrix.md)); detection timing, precedence and errors with data-driven case studies ([detection_timing_and_errors.md](docs/detection_timing_and_errors.md)); the final model and test ([supervised_fusion.md](docs/supervised_fusion.md), full record in [experiment_features_v2.md](docs/experiment_features_v2.md)). The flat-feature Isolation Forest baseline (9.2) is the weakest detector: 0 of 136 attack hours on Days 13–16 and 0 of 39 on Days 17–30 at 38 alerts/day.
+- **End-to-end runner (8.1):** `python scripts/run_pipeline.py --profile sample` takes the tracked subset in `data/samples/lanl_pipeline_subset` through ingestion, features, scoring with the frozen release model in `models/release`, alerts, investigation evidence and a dashboard check; `--profile full` reproduces the run of record and reuses verified outputs. See [docs/pipeline_runner.md](docs/pipeline_runner.md).
+- **GenAI investigation, dashboard and reliability review (6.x, 7.x, 9.5):** ATT&CK retrieval, Gemini summaries with an automatic evidence check, the analyst dashboard and the reviewer sample are in the repository. See [docs/genai_investigation.md](docs/genai_investigation.md), [docs/attack_retrieval.md](docs/attack_retrieval.md), [docs/investigation_review.md](docs/investigation_review.md) and the dashboard section below.
+- **Runtime and user manual (8.3, 8.4):** [docs/runtime_and_resources.md](docs/runtime_and_resources.md) and [docs/user_manual.md](docs/user_manual.md).
+
+Large data, feature builds, model checkpoints, scores and logs are not stored in Git; each guide says where they come from or how to rebuild them.
 
 ## Quick smoke check
 
@@ -47,7 +60,7 @@ python scripts/smoke_test.py
 
 The smoke check uses only the tracked synthetic fixture and does not require LANL data, model checkpoints or external service credentials.
 
-## Incident dashboard (Task 7.1)
+## Incident dashboard (Tasks 7.1 and 7.2)
 
 Install `requirements.txt`, then launch the read-only analyst dashboard from the repository root:
 
@@ -56,6 +69,15 @@ streamlit run scripts/incident_dashboard.py
 ```
 
 It opens the tracked **Synthetic fixture** (`data/fixtures/incidents_mock.jsonl`) by default. These records and their score and evidence fields are illustrative, not detector results, traceable evidence, or a live feed. Select **Local JSONL export** in the sidebar and enter a local path to view a saved full incident export from `scripts/align_and_fuse_scores.py --incidents-output <path>.jsonl`. The dashboard identifies this as a saved file, not a live feed, and reports missing or malformed files without switching to the fixture. Incident times are dataset-relative seconds, with half-open `[start, end)` ranges. The dashboard consumes packaged incidents only; it does not run detectors. The current Parquet incident export omits nested detector scores, so this dashboard accepts JSONL.
+
+Select **Alert handoff package** to open the final model's days 17–30 alerts (`outputs/handoff/final_test_alerts_v1/incidents.jsonl`, built by `scripts/export_alert_handoff.py`; see `docs/alert_handoff.md`). An incident's detail view then adds the Task 7.2 evidence panels:
+
+- **Alerted hours:** rank, tie status and scores per hour.
+- **Authentication events:** a time-ordered timeline of every cited event; selecting a row shows its full source record.
+- **User–host relationships:** one row per source → destination pair, with first-time pairs listed first.
+- **Graph detector context:** labelled as not used by the final model.
+
+Event details come from `events.parquet` in the same folder as the incident file; without it, the view lists the event references only. The red-team answer key stays hidden unless **Show answer key (evaluation only)** is switched on in the sidebar.
 
 ## Planned top-level layout
 

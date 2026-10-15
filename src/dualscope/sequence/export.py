@@ -169,6 +169,8 @@ def build_score_table(
     if np.any(np.isnan(raw[available])) or np.any(~np.isnan(raw[~available])):
         raise ValueError("raw scores must be present exactly for available user-hours")
     names = input_feature_names()
+    if len(names) != scores.chunk_feature_mean.shape[1]:
+        raise ValueError("export supports only the default sequence inputs; feature names do not match the model")
     evidence = scores.evidence_chunks(aggregation)
     has_chunk = available & (evidence >= 0)
     if np.any(available & ~has_chunk):

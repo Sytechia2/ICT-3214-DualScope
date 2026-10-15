@@ -1,0 +1,15 @@
+{
+  "selected_method": "weighted",
+  "sequence_weight": 0.5,
+  "graph_weight": 0.5,
+  "is_temporal": true,
+  "temporal_half_life_seconds": 21600.0,
+  "temporal_boost_weight": 0.15,
+  "fused_alert_threshold": 0.9981876419123901,
+  "metrics": {
+    "average_precision": 0.05922432783268977,
+    "best_f1": 0.16744186046511628,
+    "precision": 0.13533834586466165,
+    "recall": 0.21951219512195122
+  }
+}

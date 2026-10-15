@@ -1,0 +1,54 @@
+{
+  "description": "Frozen run-of-record files of the DualScope final detection model. Never retrained.",
+  "git_revision": "a8b94868a1e10bb351631da31acfaa1098c7163f",
+  "git_revision_note": "Revision recorded in gru/run_manifest.json (source_revision) and fusion/manifest.json (git_revision); both runs used it.",
+  "created_with": {
+    "scikit-learn": "1.9.1",
+    "torch": "2.11.0+cu128",
+    "python": "3.13.11",
+    "numpy": "2.5.3"
+  },
+  "final_test": {
+    "days": "17-30",
+    "run_on": "2026-10-06",
+    "note": "Run once; never repeat."
+  },
+  "files": {
+    "gru/checkpoint.pt": {
+      "sha256": "2f63843ad037b5d54d5a3275797b333f0313ed7d7efb2d5f547e1e919c7ab3ef",
+      "size_bytes": 64117,
+      "source": "models/sequence/runs_final_test/A/checkpoint.pt",
+      "description": "GRU autoencoder weights (run A, sequence length 32, hidden 32); produces the max_event score"
+    },
+    "gru/config.json": {
+      "sha256": "3fb31dff4e708218842533c3e753df8e5496db3c0b4a35181ea0f12b6945f721",
+      "size_bytes": 1279,
+      "source": "models/sequence/runs_final_test/A/config.json",
+      "description": "GRU sequence detector configuration"
+    },
+    "gru/run_manifest.json": {
+      "sha256": "e2ceb6cacafa28990a9117af2800cfd952f228a2b04ee0a6a6fdb7cc8c1932a3",
+      "size_bytes": 5759,
+      "source": "models/sequence/runs_final_test/A/run_manifest.json",
+      "description": "GRU training record with the sequence configuration used to build the model"
+    },
+    "fusion/model.joblib": {
+      "sha256": "02b4e6f7e3d10d80dea0680b2850780cac3b7eb6f7ced49b52fc2a18fb6a554d",
+      "size_bytes": 175728,
+      "source": "models/fusion/final_test/frozen/model.joblib",
+      "description": "Frozen HistGradientBoosting fusion model (GRU max_event plus hourly counts)"
+    },
+    "fusion/manifest.json": {
+      "sha256": "6827e695597f8e08c6d9048df58fe2646c91b338ea37cd0ddb20df9e277a2dac",
+      "size_bytes": 2136,
+      "source": "models/fusion/final_test/frozen/manifest.json",
+      "description": "Fusion model record: inputs, settings, hash and the GRU run it expects"
+    },
+    "features/preprocessing.json": {
+      "sha256": "9fc82c04606674c6eebc8eecbcf842d90ef6a37e33b08d710a2ab99c801c5736",
+      "size_bytes": 4637,
+      "source": "data/processed/lanl_features_v2_days_01_30/preprocessing.json",
+      "description": "Frozen feature preprocessing fitted on the training days; any feature build must use this file"
+    }
+  }
+}

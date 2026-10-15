@@ -1,0 +1,142 @@
+{
+  "profile": "full",
+  "description": "Reproduces the run of record: days 1-30 ingestion and features (reused when verified), fresh scoring of validation days 8-16 with the frozen models, the validation queue, the stored one-time test queue for days 17-30 and its GenAI investigations.",
+  "run_dir": "outputs/pipeline/full",
+  "in_sample_note": "Days 8-16 were the fusion model's fitting days, so red-team catches in the validation queue are in-sample. Days 17-30 come only from the stored one-time test and are never scored again.",
+  "stages": [
+    {
+      "name": "ingest",
+      "requires": []
+    },
+    {
+      "name": "features",
+      "requires": [
+        "ingest"
+      ]
+    },
+    {
+      "name": "score",
+      "requires": [
+        "features"
+      ]
+    },
+    {
+      "name": "alerts",
+      "requires": [
+        "score"
+      ]
+    },
+    {
+      "name": "test_package",
+      "requires": []
+    },
+    {
+      "name": "investigate",
+      "requires": [
+        "alerts",
+        "test_package"
+      ]
+    },
+    {
+      "name": "dashboard",
+      "requires": [
+        "alerts",
+        "test_package"
+      ],
+      "optional": [
+        "investigate"
+      ]
+    }
+  ],
+  "release_dir": "models/release",
+  "ingest": {
+    "auth": "dataset/auth.txt.gz",
+    "redteam": "dataset/redteam.txt.gz",
+    "inspection": "data/manifests/lanl_auth_inspection.json",
+    "day_start": 1,
+    "day_end": 30,
+    "workers": 4,
+    "output": "{run}/ingested",
+    "reuse": {
+      "path": "data/processed/lanl_auth_days_01_30",
+      "day_start": 1,
+      "day_end": 30,
+      "rows": 508854306
+    }
+  },
+  "features": {
+    "mode": "full_build",
+    "feature_config": "config/lanl_features_v2.json",
+    "splits_config": "config/lanl_splits.json",
+    "splits_manifest": "data/manifests/lanl_splits_v1.json",
+    "workers": 2,
+    "assembly_workers": 1,
+    "output": "{run}/features",
+    "reuse": {
+      "path": "data/processed/lanl_features_v2_days_01_30",
+      "events": 508854306
+    }
+  },
+  "score": {
+    "days": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "device": "cpu",
+    "output": "{run}/scores",
+    "reproduction": {
+      "day": 16,
+      "units": "outputs/experiment_v2/units_A.parquet",
+      "counts": "outputs/experiment_v2/fusion_counts.parquet",
+      "gru_tolerance": 0.005,
+      "top_k": 38
+    }
+  },
+  "alerts": {
+    "budget": 38,
+    "split_name": "validation",
+    "id_prefix": "INC-VAL",
+    "splits_config": "config/lanl_splits.json",
+    "output": "{run}/alerts_validation"
+  },
+  "test_package": {
+    "path": "outputs/handoff/final_test_alerts_v1",
+    "expect": {
+      "alerts": 532,
+      "incidents": 497,
+      "redteam_alerts": 1
+    }
+  },
+  "investigate": {
+    "handoff": "test_package.package",
+    "llm_output": "outputs/investigations/gemini_v1",
+    "reuse": {
+      "incidents": 497
+    },
+    "validation_output": "{run}/investigations_validation",
+    "workers": 8,
+    "timeout_seconds": 14400
+  },
+  "dashboard": {
+    "packages": [
+      {
+        "name": "test",
+        "incidents": "test_package.package",
+        "investigations": "investigate.investigations"
+      },
+      {
+        "name": "validation",
+        "incidents": "alerts.package",
+        "investigations": "investigate.investigations_validation"
+      }
+    ],
+    "output": "{run}/dashboard"
+  }
+}

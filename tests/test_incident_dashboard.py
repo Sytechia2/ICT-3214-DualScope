@@ -1,4 +1,4 @@
-"""Task 7.1 incident loading, queue behavior, and dashboard navigation."""
+"""Task 7.1 incident loading and queue filtering (the redesigned pages are tested in test_dashboard_app.py)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-from streamlit.testing.v1 import AppTest
 
 from dualscope.dashboard.data import (
     DEFAULT_FIXTURE,
@@ -16,8 +15,6 @@ from dualscope.dashboard.data import (
     load_incidents,
 )
 
-
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "incident_dashboard.py"
 
 
 def test_fixture_has_full_incident_records_and_unavailable_detector() -> None:
@@ -81,48 +78,3 @@ def test_queue_filtering_and_sorting() -> None:
         incidents, start_time=93601, end_time=108002
     )] == ["INC-VALIDATION-D02-U2_DOM1-001"]
     assert filter_sort_incidents(incidents, user_query="missing") == []
-
-
-def test_streamlit_queue_detail_back_and_source_label() -> None:
-    at = AppTest.from_file(str(SCRIPT)).run()
-    assert not at.exception
-    assert any("Synthetic fixture" in item.value for item in at.info)
-    assert len(at.dataframe) == 1
-
-    at.session_state["selected_incident_id"] = "INC-VALIDATION-D02-U1_DOM1-001"
-    at.run()
-    assert not at.exception
-    assert any("Incident INC-VALIDATION-D02-U1_DOM1-001" in item.value for item in at.subheader)
-    assert len(at.table) == 1
-
-    at.button[0].click().run()
-    assert not at.exception
-    assert at.session_state["selected_incident_id"] is None
-    assert len(at.dataframe) == 1
-
-
-def test_streamlit_external_empty_and_error_states(tmp_path: Path) -> None:
-    empty = tmp_path / "empty.jsonl"
-    empty.write_text("", encoding="utf-8")
-    at = AppTest.from_file(str(SCRIPT)).run()
-    at.text_input[0].input("nonexistent-user").run()
-    at.sidebar.radio[0].set_value("Local JSONL export").run()
-    assert any("Enter a local" in item.value for item in at.error)
-    at.sidebar.text_input[0].input(str(DEFAULT_FIXTURE)).run()
-    assert len(at.dataframe) == 1
-    assert at.text_input(key="filter_user").value == ""
-    at.sidebar.text_input[0].input(str(empty)).run()
-    assert not at.exception
-    assert any("Local JSONL export" in item.value for item in at.info)
-    assert any("contains no incidents" in item.value for item in at.warning)
-    at.sidebar.text_input[0].input(str(tmp_path / "missing.jsonl")).run()
-    assert any("Could not load incidents" in item.value for item in at.error)
-    assert len(at.dataframe) == 0
-
-
-def test_streamlit_no_filter_matches_state() -> None:
-    at = AppTest.from_file(str(SCRIPT)).run()
-    at.text_input[0].input("nonexistent-user").run()
-    assert not at.exception
-    assert any("No incidents match" in item.value for item in at.info)
-    assert len(at.dataframe) == 0

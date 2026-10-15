@@ -1,0 +1,365 @@
+{
+  "version": "investigation_review_sample_v1",
+  "created_utc": "2026-10-07T11:54:09Z",
+  "seed": 0,
+  "method": "Incidents are chosen from detector and evidence fields only (priority, graph detector agreement, Task 6.1 behaviour rules, event count, dataset day); no LLM output is used. Incidents are filled at random (seed 0) until each minimum count is met, then up to 25 incidents, with at most 3 per dataset day.",
+  "incidents": [
+    {
+      "incident_id": "INC-TEST-D18-U1718_?-002",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "failed_logons",
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination",
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 6,
+        "size": "small_under_60_events",
+        "dataset_day": 18
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D18-U24_DOM1-002",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": true,
+        "behaviours": [],
+        "no_rule_match": true,
+        "events": 3527,
+        "size": "large_over_1000_events",
+        "dataset_day": 18
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D19-U1702_DOM1-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 14,
+        "size": "small_under_60_events",
+        "dataset_day": 19
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D19-U24_DOM1-003",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": true,
+        "behaviours": [],
+        "no_rule_match": true,
+        "events": 3043,
+        "size": "large_over_1000_events",
+        "dataset_day": 19
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D19-U66_DOM1-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": true,
+        "behaviours": [],
+        "no_rule_match": true,
+        "events": 13775,
+        "size": "large_over_1000_events",
+        "dataset_day": 19
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D20-U10021_DOM1-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 87,
+        "size": "medium",
+        "dataset_day": 20
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D20-U66_DOM1-003",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": true,
+        "behaviours": [],
+        "no_rule_match": true,
+        "events": 13800,
+        "size": "large_over_1000_events",
+        "dataset_day": 20
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D21-U10899_DOM3-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "failed_logons",
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 28,
+        "size": "small_under_60_events",
+        "dataset_day": 21
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D21-U8887_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 47,
+        "size": "small_under_60_events",
+        "dataset_day": 21
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D21-U981_DOM1-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 252,
+        "size": "medium",
+        "dataset_day": 21
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D23-U9007_DOM1-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 84,
+        "size": "medium",
+        "dataset_day": 23
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D24-U3398_DOM1-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "failed_logons",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 144,
+        "size": "medium",
+        "dataset_day": 24
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D24-U7606_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 36,
+        "size": "small_under_60_events",
+        "dataset_day": 24
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D26-U8533_DOM1-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 62,
+        "size": "medium",
+        "dataset_day": 26
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D27-U1165_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 17,
+        "size": "small_under_60_events",
+        "dataset_day": 27
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D27-U213_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 62,
+        "size": "medium",
+        "dataset_day": 27
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D27-U8773_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 54,
+        "size": "small_under_60_events",
+        "dataset_day": 27
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D28-U1866_DOM1-001",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "failed_logons",
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 28,
+        "size": "small_under_60_events",
+        "dataset_day": 28
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D28-U737_DOM1-003",
+      "strata": {
+        "priority": "HIGH",
+        "graph_agrees": false,
+        "behaviours": [
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 130,
+        "size": "medium",
+        "dataset_day": 28
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D29-U1179_DOM1-002",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "logon_from_new_source"
+        ],
+        "no_rule_match": false,
+        "events": 105,
+        "size": "medium",
+        "dataset_day": 29
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D29-U5521_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 110,
+        "size": "medium",
+        "dataset_day": 29
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D29-U7572_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "failed_logons",
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 59,
+        "size": "small_under_60_events",
+        "dataset_day": 29
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D30-U3930_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "failed_logons",
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 50,
+        "size": "small_under_60_events",
+        "dataset_day": 30
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D30-U398_DOM1-001",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [],
+        "no_rule_match": true,
+        "events": 181,
+        "size": "medium",
+        "dataset_day": 30
+      }
+    },
+    {
+      "incident_id": "INC-TEST-D30-U931_DOM1-002",
+      "strata": {
+        "priority": "MEDIUM",
+        "graph_agrees": false,
+        "behaviours": [
+          "ntlm_logon_to_new_destination",
+          "network_logon_to_new_destination"
+        ],
+        "no_rule_match": false,
+        "events": 132,
+        "size": "medium",
+        "dataset_day": 30
+      }
+    }
+  ]
+}

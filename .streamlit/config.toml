@@ -1,0 +1,56 @@
+# DualScope dashboard theme (scripts/incident_dashboard.py). Run Streamlit from the repository root.
+
+[server]
+enableStaticServing = true
+
+[client]
+toolbarMode = "viewer"
+
+[browser]
+gatherUsageStats = false
+
+[[theme.fontFaces]]
+family = "public-sans"
+url = "app/static/fonts/PublicSans-Variable.ttf"
+style = "normal"
+
+[[theme.fontFaces]]
+family = "public-sans"
+url = "app/static/fonts/PublicSans-Italic-Variable.ttf"
+style = "italic"
+
+[[theme.fontFaces]]
+family = "jetbrains-mono"
+url = "app/static/fonts/JetBrainsMono-Variable.ttf"
+style = "normal"
+
+[theme]
+base = "light"
+font = "public-sans"
+headingFont = "public-sans"
+codeFont = "jetbrains-mono"
+baseFontSize = 14
+primaryColor = "#3B4250"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F6F7F8"
+textColor = "#1F2328"
+linkColor = "#3B4250"
+borderColor = "#E1E4E8"
+dataframeBorderColor = "#E1E4E8"
+dataframeHeaderBackgroundColor = "#F6F7F8"
+showWidgetBorder = true
+baseRadius = "6px"
+buttonRadius = "6px"
+redColor = "#C4391F"
+orangeColor = "#D99A1E"
+greenColor = "#2E8B57"
+blueColor = "#3B4250"
+grayColor = "#7D838C"
+chartCategoricalColors = ["#2563EB", "#C4391F", "#D99A1E", "#9AA1AA", "#1F2328"]
+
+[theme.sidebar]
+backgroundColor = "#1F2328"
+secondaryBackgroundColor = "#2B3036"
+textColor = "#E6E8EB"
+primaryColor = "#FFFFFF"
+borderColor = "#3A4047"

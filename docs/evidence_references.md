@@ -4,7 +4,7 @@
 
 An accepted authentication event has a stable `source_reference` in the form `auth.txt:<source_line>`, for example `auth.txt:3`. The source line distinguishes identical duplicate records. The normalized event stores this reference, its `source_line`, and the original `raw_record`; ingestion also records the reference format in `authentication/summary.json`. Rejected or out-of-scope source lines do not have normalized event rows.
 
-Task 2.5 provides lookup and carrier utilities so detector outputs can preserve these IDs. It does not yet connect actual sequence or graph detector builders, and the checked-in incident trace is a small synthetic example, not an incident produced by a trained detector. The 30-day Task 2.4 feature build is also a separate run; only the documented 15.8-million-event performance pilot has been produced.
+Task 2.5 provides lookup and carrier utilities so detector outputs can preserve these IDs. The sequence and graph builders now carry references into their generated evidence artifacts; the checked-in incident trace remains a small synthetic demonstration rather than a real incident. The local production Task 2.4 run processed and reconciled all 508,854,306 events, while its large generated artifacts remain outside Git.
 
 ## Lookup API
 
@@ -30,10 +30,10 @@ On initialization, the lookup reads the summary's part manifest and Parquet meta
 `dualscope.evidence.carriers` provides helpers that copy records and keep provenance in the caller's desired order:
 
 - `attach_sequence_references(sequence, events)` adds `source_references` to a sequence. It preserves duplicates and checks split metadata when supplied.
-- `attach_edge_references(edge, events)` adds ordered `source_references` and `evidence_count` to an aggregated graph edge. Duplicate references are preserved. It materializes all contributing IDs as a list, so a high-volume edge may need a file-backed reference set when the graph detector is built.
+- `attach_edge_references(edge, events)` adds ordered `source_references` and `evidence_count` to an aggregated graph edge. Duplicate references are preserved. Production graph snapshots bound the embedded preview to the first 100 source lines per edge, retain the exact contributing count, and mark truncation explicitly.
 - `paginate_references(references, offset=0, limit=100)` returns a stable page, `has_more`, and `next_offset`. It uses one-item lookahead, so it can page a large iterable without materializing it. For a one-shot iterator, callers must supply a fresh iterator for each page.
 
-The Task 2.4 raw and transformed feature schemas also preserve `source_reference` for each event. These fields let downstream builders carry event IDs into higher-level evidence. The helpers do not build sequence or graph outputs themselves.
+The Task 2.4 raw and transformed feature schemas also preserve `source_reference` for each event. These fields let downstream builders carry event IDs into higher-level evidence. The helpers remain independent utilities; the detector builders and exporters are responsible for their own output construction.
 
 ## Demonstration and focused tests
 
@@ -51,4 +51,4 @@ Run the focused evidence tests with:
 python -m pytest tests/test_evidence.py
 ```
 
-The tests cover lookup and raw-record recovery, duplicate IDs, absent and malformed references, ordered multi-lookup, pagination, feature reference preservation, sequence and edge carriers, split checks, and large iterable paging. The trace demonstrates the sample data contract; it does not establish end-to-end integration with trained detectors or real incident output.
+The tests cover lookup and raw-record recovery, duplicate IDs, absent and malformed references, ordered multi-lookup, pagination, feature reference preservation, sequence and edge carriers, split checks, and large iterable paging. The trace demonstrates the sample data contract; production graph evidence is additionally exercised by the graph detector tests and export pipeline.

@@ -1,0 +1,210 @@
+{
+  "task": "3.2 \u2014 Implement and train the GRU autoencoder",
+  "run_id": "A",
+  "created_utc": "2026-10-06T10:35:16Z",
+  "source_revision": "a8b94868a1e10bb351631da31acfaa1098c7163f",
+  "sequence_config": {
+    "policy": {
+      "hour_seconds": 3600,
+      "max_sequence_length": 32,
+      "min_events": 1,
+      "require_complete_24h_history": true
+    },
+    "model": {
+      "hidden_size": 32,
+      "latent_size": 16,
+      "num_layers": 1,
+      "embedding_dim": 4,
+      "dropout": 0.0,
+      "numeric_weight": 1.0,
+      "binary_weight": 1.0,
+      "categorical_weight": 1.0
+    },
+    "training": {
+      "seed": 42,
+      "train_sequences": 300000,
+      "max_chunks_per_user_hour": 2,
+      "monitor_sequences": 30000,
+      "batch_size": 512,
+      "learning_rate": 0.001,
+      "max_epochs": 8,
+      "early_stopping_patience": 2,
+      "gradient_clip_norm": 1.0,
+      "torch_threads": 5
+    },
+    "search": {
+      "max_sequence_lengths": [
+        32,
+        64,
+        128
+      ],
+      "model_sizes": {
+        "small": {
+          "hidden_size": 32,
+          "latent_size": 16,
+          "embedding_dim": 4
+        },
+        "medium": {
+          "hidden_size": 64,
+          "latent_size": 32,
+          "embedding_dim": 8
+        }
+      },
+      "aggregations": [
+        "max_chunk_mean",
+        "max_event",
+        "hour_mean"
+      ],
+      "selection_metric": "average_precision",
+      "threshold_objective": "max_f1"
+    },
+    "aggregation": "max_chunk_mean",
+    "top_events": 5,
+    "top_features": 3
+  },
+  "sequence_config_fingerprint": "aabb8cfe2ac433ee576ac99ad6fd6b53ba43ca81de95aeb381d9f98d72a4f226",
+  "model_spec": {
+    "n_numeric": 5,
+    "n_binary": 3,
+    "categorical_cardinalities": [
+      22,
+      12,
+      9,
+      4
+    ],
+    "hidden_size": 32,
+    "latent_size": 16,
+    "num_layers": 1,
+    "embedding_dim": 4,
+    "dropout": 0.0,
+    "numeric_weight": 1.0,
+    "binary_weight": 1.0,
+    "categorical_weight": 1.0
+  },
+  "parameters": 13443,
+  "feature": {
+    "feature_version": "2.0.0",
+    "feature_name": "lanl_historical_features_v2",
+    "feature_config_fingerprint": "22f6cc09cd0726e6e49db13e183086bf098446e7de3cbf3650ac37f3251373fb",
+    "preprocessing_sha256": "9fc82c04606674c6eebc8eecbcf842d90ef6a37e33b08d710a2ab99c801c5736",
+    "preprocessing_mode": "production",
+    "features_dir": "data/processed/lanl_features_v2_days_01_30/transformed/events"
+  },
+  "split_policy_fingerprint": "c5e3d5d89c0324b24ca79f391abfec197f47f89fd9ddb3f7652f4fe5a1284af9",
+  "excluded_training_users": [
+    "U1723@DOM1",
+    "U6115@DOM1",
+    "U620@DOM1",
+    "U636@DOM1",
+    "U737@DOM1",
+    "U748@DOM1",
+    "U825@DOM1"
+  ],
+  "samples": {
+    "train": {
+      "days": 7,
+      "user_hours_selected": 2238183,
+      "chunks_total": 4355459,
+      "chunk_candidates": 3110966,
+      "chunks_sampled": 300000,
+      "events_sampled": 5763889
+    },
+    "monitor": {
+      "days": 9,
+      "user_hours_selected": 3745355,
+      "chunks_total": 7311025,
+      "chunk_candidates": 5217075,
+      "chunks_sampled": 30000,
+      "events_sampled": 576424
+    }
+  },
+  "training_seconds": 356.4,
+  "epochs_run": 8,
+  "selected_epoch": 8,
+  "loss_history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.4116529384279288,
+      "monitor_loss": 0.31691374455861837,
+      "initial_monitor_loss": 1.158908742502535,
+      "epoch_seconds": 43.69,
+      "selected": false
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.2842933523905013,
+      "monitor_loss": 0.269054691956948,
+      "initial_monitor_loss": 1.158908742502535,
+      "epoch_seconds": 43.69,
+      "selected": false
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.2573748351089194,
+      "monitor_loss": 0.2501937353511559,
+      "initial_monitor_loss": 1.158908742502535,
+      "epoch_seconds": 43.66,
+      "selected": false
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.2447686366051165,
+      "monitor_loss": 0.24366118559067618,
+      "initial_monitor_loss": 1.158908742502535,
+      "epoch_seconds": 44.31,
+      "selected": false
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.2385424480861844,
+      "monitor_loss": 0.23740808253645435,
+      "initial_monitor_loss": 1.158908742502535,
+      "epoch_seconds": 44.25,
+      "selected": false
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.23216335395285267,
+      "monitor_loss": 0.23116215027182868,
+      "initial_monitor_loss": 1.158908742502535,
+      "epoch_seconds": 44.13,
+      "selected": false
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.227280986498276,
+      "monitor_loss": 0.22849459337952907,
+      "initial_monitor_loss": 1.158908742502535,
+      "epoch_seconds": 44.59,
+      "selected": false
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.2243289074651817,
+      "monitor_loss": 0.22507208156984088,
+      "initial_monitor_loss": 1.158908742502535,
+      "epoch_seconds": 44.14,
+      "selected": true
+    }
+  ],
+  "checkpoint": {
+    "path": "checkpoint.pt",
+    "sha256": "2f63843ad037b5d54d5a3275797b333f0313ed7d7efb2d5f547e1e919c7ab3ef"
+  },
+  "reload_check": {
+    "held_out": "label-free validation monitor sample",
+    "sequences": 30000,
+    "mean_reconstruction_error": 0.22507208156984088,
+    "finite": true
+  },
+  "environment": {
+    "python": "3.13.11",
+    "torch": "2.11.0+cu128",
+    "numpy": "2.5.3",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "AMD64 Family 26 Model 36 Stepping 0, AuthenticAMD",
+    "torch_threads": 5,
+    "training_device": "cpu"
+  },
+  "labels_used": false
+}

@@ -26,6 +26,11 @@ from dualscope.fusion.incident import (
     IncidentClusterer,
     IncidentRecord,
 )
+from dualscope.fusion.supervised import (
+    SUPERVISED_FEATURE_NAMES,
+    SupervisedFusionModel,
+    extract_fusion_features,
+)
 from dualscope.fusion.temporal import (
     TEMPORAL_FUSED_SCORE_SCHEMA,
     TemporalFusionEngine,
@@ -48,10 +53,14 @@ __all__ = [
     "IncidentConfig",
     "IncidentPriority",
     "IncidentRecord",
+    "SUPERVISED_FEATURE_NAMES",
     "ScoreAlignmentEngine",
+    "SupervisedFusionModel",
     "TEMPORAL_FUSED_SCORE_SCHEMA",
     "TemporalConfig",
     "TemporalFusedScoreRow",
     "TemporalFusionEngine",
     "classify_disagreement",
+    "extract_fusion_features",
 ]
+

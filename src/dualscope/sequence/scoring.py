@@ -57,12 +57,17 @@ def score_chunks(
     categorical: np.ndarray,
     chunks: ChunkIndex,
     batch_size: int = 2048,
+    feature_scale: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Score chunks; return chunk mean errors, chunk feature means, event errors, event top features.
 
     Event-level outputs are indexed like ``dense``; events outside any chunk stay NaN / -1.
+    ``feature_scale`` (one positive value per input feature, e.g. each feature's
+    mean training-sample loss) divides every per-feature loss before averaging,
+    so no single feature's loss scale dominates the event error.
     """
     model.eval()
+    device = next(model.parameters()).device
     n_features = model.spec.n_features
     chunk_mean = np.full(len(chunks), np.nan, dtype=np.float64)
     chunk_feature = np.full((len(chunks), n_features), np.nan, dtype=np.float32)
@@ -74,8 +79,13 @@ def score_chunks(
         starts, lengths = chunks.start[idx], chunks.length[idx]
         d, c, mask = gather_padded(dense, categorical, starts, lengths)
         errors = per_feature_errors(
-            model, torch.from_numpy(d), torch.from_numpy(c), torch.from_numpy(lengths.astype(np.int64))
-        ).numpy()
+            model,
+            torch.from_numpy(d).to(device),
+            torch.from_numpy(c).to(device),
+            torch.from_numpy(lengths.astype(np.int64)).to(device),
+        ).cpu().numpy()
+        if feature_scale is not None:
+            errors = errors / feature_scale
         per_event = errors.mean(axis=-1)
         valid_len = lengths.astype(np.float64)
         chunk_mean[idx] = per_event.sum(axis=1, dtype=np.float64) / valid_len
@@ -94,12 +104,13 @@ def score_day(
     day: DaySequences,
     max_length: int,
     batch_size: int = 2048,
+    feature_scale: np.ndarray | None = None,
 ) -> DayScores:
     """Score every available user-hour in a day."""
     scorable = np.flatnonzero(day.scorable_mask())
     chunks = build_chunks(day.offsets, day.counts, max_length, scorable)
     chunk_mean, chunk_feature, event_error, event_top = score_chunks(
-        model, day.numeric, day.categorical, chunks, batch_size
+        model, day.numeric, day.categorical, chunks, batch_size, feature_scale
     )
 
     n = day.n_user_hours

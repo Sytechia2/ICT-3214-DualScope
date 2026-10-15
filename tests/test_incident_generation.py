@@ -149,3 +149,31 @@ def test_incident_serialization(clusterer: IncidentClusterer) -> None:
     assert table.schema == INCIDENT_RECORD_SCHEMA
     assert table["incident_id"][0].as_py() == incidents[0].incident_id
     assert table["priority"][0].as_py() == "HIGH"
+    assert table["is_rule_based_signature"][0].as_py() is False
+    assert table["rule_matches"][0].as_py() == []
+
+
+def test_signature_rule_layer_elevates_to_critical() -> None:
+    """Known attack signatures elevate priority to CRITICAL and tag the envelope."""
+    cfg = IncidentConfig(
+        max_merge_gap_seconds=7200,
+        critical_threshold=0.9995,
+        high_threshold=0.9990,
+        medium_threshold=0.9900,
+    )
+    # Configure clusterer with a known malicious user signature
+    clusterer = IncidentClusterer(cfg, known_signatures={"U620@DOM1"})
+    row = _make_fused_row("U620@DOM1", 86401, fused_score=0.991)  # score below high/critical
+
+    incidents = clusterer.cluster_incidents([row])
+    assert len(incidents) == 1
+    inc = incidents[0]
+    assert inc.is_rule_based_signature is True
+    assert inc.priority == IncidentPriority.CRITICAL
+    assert "signature_user:U620@DOM1" in inc.rule_matches
+
+    # Check table schema and fields
+    table = clusterer.to_arrow_table(incidents)
+    assert table["is_rule_based_signature"][0].as_py() is True
+    assert table["rule_matches"][0].as_py() == ["signature_user:U620@DOM1"]
+

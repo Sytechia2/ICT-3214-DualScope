@@ -23,7 +23,12 @@ if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from dualscope.sequence.builder import build_chunks, gather_padded, source_reference  # noqa: E402
-from dualscope.sequence.config import SEQUENCE_POLICY_VERSION, SequenceDetectorConfig, input_feature_names  # noqa: E402
+from dualscope.sequence.config import (  # noqa: E402
+    SEQUENCE_CATEGORICAL_INPUTS,
+    SEQUENCE_POLICY_VERSION,
+    SequenceDetectorConfig,
+    input_feature_names,
+)
 from dualscope.sequence.pipeline import git_revision, load_inputs  # noqa: E402
 from dualscope.splits import SequenceCandidateRejectionTracker  # noqa: E402
 
@@ -51,7 +56,7 @@ def _percentiles(values: np.ndarray) -> dict[str, float]:
     return {f"p{p:g}": float(v) for p, v in zip(points, np.percentile(values, points))}
 
 
-def write_tensor_sample(day, lengths: int, count: int, output: Path) -> dict:
+def write_tensor_sample(day, lengths: int, count: int, output: Path, policy=None) -> dict:
     """Save padded tensors, masks and evidence references for a few sequences."""
     available = np.flatnonzero(day.scorable_mask())
     rng = np.random.default_rng(0)
@@ -93,8 +98,8 @@ def write_tensor_sample(day, lengths: int, count: int, output: Path) -> dict:
             "mask": "bool [sequence, step]; True for real events",
             "lengths": "int32 [sequence] real events per sequence",
         },
-        "dense_features": input_feature_names()[:8],
-        "categorical_features": input_feature_names()[8:],
+        "dense_features": input_feature_names(policy)[: -len(SEQUENCE_CATEGORICAL_INPUTS)],
+        "categorical_features": input_feature_names(policy)[-len(SEQUENCE_CATEGORICAL_INPUTS) :],
         "sequences": sequences,
     }
     output.with_suffix(".json").write_text(json.dumps(description, indent=2), encoding="utf-8")
@@ -145,7 +150,7 @@ def main() -> int:
         per_day.append({"dataset_day": day.dataset_day, "split": day.split, "events": day.n_events, "user_hours": day.n_user_hours, "available_user_hours": int(available.sum())})
         print(f"day {day.dataset_day:02d} [{day.split}] events={day.n_events:,} user-hours={day.n_user_hours:,} available={available.sum():,}")
         if args.sample_output is not None and day.dataset_day == sample_day:
-            sample_info = write_tensor_sample(day, policy.max_sequence_length, args.sample_sequences, args.sample_output)
+            sample_info = write_tensor_sample(day, policy.max_sequence_length, args.sample_sequences, args.sample_output, policy)
 
     for name, entry in splits.items():
         lengths = np.concatenate(counts_by_split[name]) if counts_by_split[name] else np.zeros(0)
@@ -170,7 +175,7 @@ def main() -> int:
             "warm_up": "user-hours whose events lack a complete 24h feature history (dataset day 1) are insufficient_history",
             "fitting_eligibility": "train split, available, and no event whose source or destination user is a training-excluded user",
             "candidate_max_lengths": candidate_lengths,
-            "model_inputs": input_feature_names(),
+            "model_inputs": input_feature_names(config.policy),
         },
         "inputs": {
             "feature": inputs.feature_info(),

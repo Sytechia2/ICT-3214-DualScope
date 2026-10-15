@@ -24,7 +24,6 @@ import pyarrow.compute as pc
 import pyarrow.dataset as ds
 
 from dualscope.sequence.config import (
-    SEQUENCE_BINARY_INPUTS,
     SEQUENCE_CATEGORICAL_INPUTS,
     SEQUENCE_NUMERIC_INPUTS,
     SequencePolicy,
@@ -221,7 +220,7 @@ def load_day_sequences(
 
     split = _split_for_day(split_cfg, day)
     is_train = split.name == "train"
-    dense_columns = list(SEQUENCE_NUMERIC_INPUTS) + list(SEQUENCE_BINARY_INPUTS)
+    dense_columns = list(SEQUENCE_NUMERIC_INPUTS) + list(policy.binary_inputs)
     model_columns = dense_columns + list(SEQUENCE_CATEGORICAL_INPUTS)
     columns = list(_BASE_COLUMNS) + model_columns + (list(_ELIGIBILITY_COLUMNS) if is_train else [])
     table = dataset.to_table(filter=ds.field("dataset_day") == day, columns=columns)

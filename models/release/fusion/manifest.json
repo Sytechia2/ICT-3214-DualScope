@@ -1,0 +1,72 @@
+{
+  "model": "hist_gradient_boosting",
+  "experiment": "features-v2 Option A, final fusion model (docs/experiment_features_v2.md)",
+  "created_utc": "2026-10-06T11:46:00Z",
+  "git_revision": "a8b94868a1e10bb351631da31acfaa1098c7163f",
+  "sklearn_version": "1.9.1",
+  "settings": {
+    "categorical_features": "from_dtype",
+    "class_weight": "balanced",
+    "early_stopping": "auto",
+    "interaction_cst": null,
+    "l2_regularization": 0.0,
+    "learning_rate": 0.1,
+    "loss": "log_loss",
+    "max_bins": 255,
+    "max_depth": null,
+    "max_features": 1.0,
+    "max_iter": 100,
+    "max_leaf_nodes": 31,
+    "min_samples_leaf": 20,
+    "monotonic_cst": null,
+    "n_iter_no_change": 10,
+    "random_state": 0,
+    "scoring": "loss",
+    "tol": 1e-07,
+    "validation_fraction": 0.1,
+    "verbose": 0,
+    "warm_start": false
+  },
+  "n_iter": 45,
+  "inputs": [
+    "gru_max_event",
+    "n_events",
+    "n_failures",
+    "n_sources",
+    "n_destinations",
+    "n_new_user_source",
+    "n_new_host_connection",
+    "n_new_user_destination",
+    "n_ntlm",
+    "n_network_logon",
+    "n_logon",
+    "is_machine_account"
+  ],
+  "gru_score": {
+    "run_dir": "models\\sequence\\runs_final_test\\A",
+    "aggregation": "max_event",
+    "checkpoint_sha256": "2f63843ad037b5d54d5a3275797b333f0313ed7d7efb2d5f547e1e919c7ab3ef",
+    "sequence_config_fingerprint": "aabb8cfe2ac433ee576ac99ad6fd6b53ba43ca81de95aeb381d9f98d72a4f226",
+    "preprocessing_sha256": "9fc82c04606674c6eebc8eecbcf842d90ef6a37e33b08d710a2ab99c801c5736"
+  },
+  "training": {
+    "days": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16
+    ],
+    "units": 3745355,
+    "positives": 220,
+    "labels": "validation red-team user-hours (load_positive_user_hours)",
+    "units_sha256": "8da0475eb51f4d55c46d4ccf3101c30d5ee420307706ea6fce6d39d646ff0312",
+    "counts_sha256": "7d281d61a2b382b2b70629c3498e79b27f83c050d61964724cd39b33254a8405"
+  },
+  "test_labels_used": false,
+  "model_sha256": "02b4e6f7e3d10d80dea0680b2850780cac3b7eb6f7ced49b52fc2a18fb6a554d"
+}

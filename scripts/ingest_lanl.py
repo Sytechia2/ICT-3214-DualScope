@@ -20,8 +20,17 @@ from dualscope.ingestion import (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--auth", type=Path, help="Path to extracted auth.txt")
-    parser.add_argument("--redteam", type=Path, help="Path to extracted redteam.txt")
+    parser.add_argument("--auth", type=Path, help="Path to auth.txt or auth.txt.gz")
+    parser.add_argument("--redteam", type=Path, help="Path to redteam.txt or redteam.txt.gz")
+    parser.add_argument(
+        "--line-map",
+        type=Path,
+        help=(
+            "File with the original auth.txt line number for each line of --auth (one per line, "
+            "plain or .gz). Events then carry the original line numbers in source_line and "
+            "source_reference. Red-team labels keep the physical line of --redteam."
+        ),
+    )
     parser.add_argument("--output", type=Path, required=True, help="Root output directory")
     parser.add_argument("--day-start", type=int, default=1)
     parser.add_argument("--day-end", type=int, default=30)
@@ -38,6 +47,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.auth is None and args.redteam is None:
         parser.error("at least one of --auth or --redteam is required")
+    if args.line_map is not None and args.auth is None:
+        parser.error("--line-map requires --auth")
     return args
 
 
@@ -49,6 +60,7 @@ def main() -> int:
         chunk_rows=args.chunk_rows,
         max_source_rows=args.max_source_rows,
         overwrite=args.overwrite,
+        line_map=args.line_map,
     )
     summaries: dict[str, object] = {}
     if args.auth is not None:

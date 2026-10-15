@@ -101,3 +101,43 @@ def test_training_is_reproducible_for_a_fixed_seed(synthetic_sequences) -> None:
     assert h1[0]["train_loss"] == pytest.approx(h2[0]["train_loss"], abs=1e-9)
     for (k, a), (_, b) in zip(first.state_dict().items(), second.state_dict().items()):
         assert torch.allclose(a, b), k
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_gpu_training_and_scoring_match_cpu(synthetic_sequences) -> None:
+    data = synthetic_sequences
+    train, _ = sample_chunks(_days(data, [2]), 8, 200, 2, np.random.default_rng(0), lambda d: d.fitting_eligible)
+    settings = replace(CONFIG.training, max_epochs=1, batch_size=32)
+    model, _ = train_autoencoder(_spec(data), train, train, settings, device="cuda")
+    assert all(p.device.type == "cpu" for p in model.parameters())
+
+    held_out = _days(data, [4])[0]
+    chunks = build_chunks(held_out.offsets, held_out.counts, 8)
+    on_cpu = score_chunks(model, held_out.numeric, held_out.categorical, chunks)
+    on_gpu = score_chunks(model.to("cuda"), held_out.numeric, held_out.categorical, chunks)
+    np.testing.assert_allclose(on_cpu[0], on_gpu[0], rtol=0, atol=1e-4)
+    np.testing.assert_allclose(on_cpu[2], on_gpu[2], rtol=0, atol=1e-4)
+
+
+def test_feature_scale_divides_each_feature_loss_before_averaging(synthetic_sequences) -> None:
+    from dualscope.sequence.training import mean_feature_errors
+
+    data = synthetic_sequences
+    torch.manual_seed(0)
+    model = GRUSequenceAutoencoder(_spec(data))
+    day = _days(data, [3])[0]
+    chunks = build_chunks(day.offsets, day.counts, 8)
+    plain = score_chunks(model, day.numeric, day.categorical, chunks)
+    ones = score_chunks(model, day.numeric, day.categorical, chunks, feature_scale=np.ones(model.spec.n_features))
+    np.testing.assert_allclose(plain[2], ones[2], rtol=1e-6)  # float64 division; same values
+
+    sample, _ = sample_chunks([day], 8, 50, 2, np.random.default_rng(0), lambda d: d.scorable_mask())
+    scale = mean_feature_errors(model, sample)
+    assert scale.shape == (model.spec.n_features,) and np.all(scale > 0)
+    scaled = score_chunks(model, day.numeric, day.categorical, chunks, feature_scale=scale)
+
+    d, c, mask = gather_padded(day.numeric, day.categorical, chunks.start[:3], chunks.length[:3])
+    errors = per_feature_errors(model, torch.from_numpy(d), torch.from_numpy(c), torch.from_numpy(mask.sum(1))).detach().numpy()
+    expected = (errors[0, : chunks.length[0]] / scale).mean(axis=-1)
+    start = chunks.start[0]
+    np.testing.assert_allclose(scaled[2][start : start + chunks.length[0]], expected, rtol=1e-5)

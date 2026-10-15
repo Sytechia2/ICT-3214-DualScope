@@ -8,6 +8,7 @@ inputs cannot accidentally include evaluation labels.
 from __future__ import annotations
 
 import csv
+import gzip
 import json
 import shutil
 from collections import Counter, defaultdict
@@ -77,6 +78,7 @@ class IngestionConfig:
     compression: str = "zstd"
     max_source_rows: int | None = None
     overwrite: bool = False
+    line_map: Path | None = None
 
     def __post_init__(self) -> None:
         if self.day_start < 1 or self.day_end < self.day_start:
@@ -138,8 +140,50 @@ def _dataset_schema(schema: pa.Schema) -> list[dict[str, str]]:
     )
 
 
-def _write_rejection(handle: TextIO, *, line: int, raw: str, reason: str) -> None:
-    handle.write(json.dumps({"source_line": line, "reason": reason, "raw_record": raw}) + "\n")
+def _is_gzip(path: Path) -> bool:
+    return path.suffix.lower() == ".gz"
+
+
+def _open_source(path: Path) -> TextIO:
+    """Open a plain or gzip-compressed text source with identical line handling."""
+
+    if _is_gzip(path):
+        return gzip.open(path, "rt", encoding="utf-8", newline="")
+    return path.open("r", encoding="utf-8", newline="")
+
+
+def _count_lines(path: Path) -> int:
+    with _open_source(path) as handle:
+        return sum(1 for _ in handle)
+
+
+def _load_line_map(path: Path, expected_lines: int) -> list[int]:
+    """Read original line numbers (one per source line) and validate them."""
+
+    with _open_source(path) as handle:
+        try:
+            mapping = [int(line) for line in handle if line.strip()]
+        except ValueError as exc:
+            raise ValueError(f"line map {path} contains a non-integer line") from exc
+    if len(mapping) != expected_lines:
+        raise ValueError(
+            f"line map has {len(mapping)} entries but the authentication source has "
+            f"{expected_lines} lines"
+        )
+    if any(value < 1 for value in mapping) or any(
+        later <= earlier for earlier, later in zip(mapping, mapping[1:])
+    ):
+        raise ValueError("line map must hold strictly increasing positive line numbers")
+    return mapping
+
+
+def _write_rejection(
+    handle: TextIO, *, line: int, raw: str, reason: str, physical_line: int | None = None
+) -> None:
+    record: dict[str, object] = {"source_line": line, "reason": reason, "raw_record": raw}
+    if physical_line is not None and physical_line != line:
+        record["physical_line"] = physical_line
+    handle.write(json.dumps(record) + "\n")
 
 
 def _write_partitions(
@@ -211,14 +255,18 @@ def ingest_authentication(source: Path, output: Path, config: IngestionConfig) -
     current_timestamp: int | None = None
     current_timestamp_records: Counter[tuple[str, ...]] = Counter()
     stopped_at_day_end = False
+    line_map = (
+        _load_line_map(config.line_map, _count_lines(source)) if config.line_map is not None else None
+    )
 
-    with source.open("r", encoding="utf-8", newline="") as handle, rejections_path.open(
+    with _open_source(source) as handle, rejections_path.open(
         "w", encoding="utf-8", newline="\n"
     ) as rejected:
         stop = False
         for chunk in _chunks(handle, config.chunk_rows):
             normalized: list[dict[str, object]] = []
-            for line_number, raw in chunk:
+            for physical_line, raw in chunk:
+                line_number = line_map[physical_line - 1] if line_map is not None else physical_line
                 if config.max_source_rows is not None and input_rows >= config.max_source_rows:
                     stop = True
                     break
@@ -226,18 +274,18 @@ def ingest_authentication(source: Path, output: Path, config: IngestionConfig) -
                 fields = next(csv.reader([raw]))
                 if len(fields) != len(AUTH_FIELD_NAMES):
                     rejection_counts["field_count"] += 1
-                    _write_rejection(rejected, line=line_number, raw=raw, reason="field_count")
+                    _write_rejection(rejected, line=line_number, physical_line=physical_line, raw=raw, reason="field_count")
                     continue
                 try:
                     timestamp = int(fields[0])
                     day = dataset_day(timestamp)
                 except ValueError:
                     rejection_counts["invalid_timestamp"] += 1
-                    _write_rejection(rejected, line=line_number, raw=raw, reason="invalid_timestamp")
+                    _write_rejection(rejected, line=line_number, physical_line=physical_line, raw=raw, reason="invalid_timestamp")
                     continue
                 if any(value == "" for value in fields[1:]):
                     rejection_counts["empty_field"] += 1
-                    _write_rejection(rejected, line=line_number, raw=raw, reason="empty_field")
+                    _write_rejection(rejected, line=line_number, physical_line=physical_line, raw=raw, reason="empty_field")
                     continue
                 if previous_timestamp is not None and timestamp < previous_timestamp:
                     raise ValueError(
@@ -293,6 +341,7 @@ def ingest_authentication(source: Path, output: Path, config: IngestionConfig) -
         "dataset": "LANL authentication",
         "source_file": str(source),
         "source_reference_format": "auth.txt:<source_line>",
+        "line_map": str(config.line_map) if config.line_map is not None else None,
         "acting_user_definition": "source_user",
         "timestamp_definition": "positive dataset-relative seconds",
         "dataset_day_formula": "((timestamp - 1) // 86400) + 1",
@@ -489,6 +538,13 @@ def ingest_authentication_parallel(
         raise ValueError("parallel ingestion requires at least two workers")
     if config.max_source_rows is not None:
         raise ValueError("max_source_rows is supported only by serial sample ingestion")
+    if _is_gzip(source):
+        raise ValueError(
+            "parallel ingestion seeks by byte offset and cannot read gzip input; "
+            "use the single-worker path (--workers 1) for .gz files"
+        )
+    if config.line_map is not None:
+        raise ValueError("line_map is supported only by the single-worker ingestion path")
     day_ranges = _load_day_ranges(inspection, config.day_start, config.day_end)
     if source.stat().st_size < max(item.byte_end for item in day_ranges):
         raise ValueError("authentication source is shorter than the inspected byte ranges")
@@ -634,7 +690,7 @@ def ingest_redteam_labels(source: Path, output: Path, config: IngestionConfig) -
     input_rows = accepted_rows = out_of_scope_rows = 0
     previous_timestamp: int | None = None
 
-    with source.open("r", encoding="utf-8", newline="") as handle, rejections_path.open(
+    with _open_source(source) as handle, rejections_path.open(
         "w", encoding="utf-8", newline="\n"
     ) as rejected:
         stop = False

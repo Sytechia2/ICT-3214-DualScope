@@ -1,0 +1,95 @@
+{
+  "profile": "sample",
+  "description": "Fixed days 1-9 subset (260 users, 526,922 events) processed from raw lines to dashboard incidents. Checks that the pipeline works end to end; scores differ from the full run.",
+  "run_dir": "outputs/pipeline/sample",
+  "in_sample_note": "Days 8-9 were part of the fusion model's training data, so red-team catches in this queue are in-sample and are not an accuracy result.",
+  "stages": [
+    {
+      "name": "ingest",
+      "requires": []
+    },
+    {
+      "name": "features",
+      "requires": [
+        "ingest"
+      ]
+    },
+    {
+      "name": "score",
+      "requires": [
+        "features"
+      ]
+    },
+    {
+      "name": "alerts",
+      "requires": [
+        "score"
+      ]
+    },
+    {
+      "name": "investigate",
+      "requires": [
+        "alerts"
+      ]
+    },
+    {
+      "name": "dashboard",
+      "requires": [
+        "alerts"
+      ],
+      "optional": [
+        "investigate"
+      ]
+    }
+  ],
+  "release_dir": "models/release",
+  "ingest": {
+    "auth": "data/samples/lanl_pipeline_subset/auth_subset.txt.gz",
+    "redteam": "data/samples/lanl_pipeline_subset/redteam_subset.txt",
+    "line_map": "data/samples/lanl_pipeline_subset/line_map.txt.gz",
+    "subset_manifest": "data/samples/lanl_pipeline_subset/manifest.json",
+    "day_start": 1,
+    "day_end": 9,
+    "workers": 1,
+    "output": "{run}/ingested"
+  },
+  "features": {
+    "mode": "release_preprocessing",
+    "feature_config": "config/lanl_features_v2.json",
+    "splits_config": "config/lanl_splits.json",
+    "splits_manifest": "data/manifests/lanl_splits_v1.json",
+    "workers": 1,
+    "output": "{run}/features"
+  },
+  "score": {
+    "days": [
+      8,
+      9
+    ],
+    "device": "cpu",
+    "output": "{run}/scores"
+  },
+  "alerts": {
+    "budget": 10,
+    "split_name": "validation",
+    "id_prefix": "INC-SMP",
+    "splits_config": "config/lanl_splits.json",
+    "output": "{run}/alerts"
+  },
+  "investigate": {
+    "output": "{run}/investigations",
+    "workers": 8,
+    "timeout_seconds": 7200,
+    "handoff": "alerts.package"
+  },
+  "dashboard": {
+    "packages": [
+      {
+        "name": "sample",
+        "incidents": "alerts.package",
+        "investigations": "investigate.investigations"
+      }
+    ],
+    "output": "{run}/dashboard"
+  }
+}

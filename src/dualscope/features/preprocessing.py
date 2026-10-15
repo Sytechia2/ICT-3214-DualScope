@@ -275,6 +275,8 @@ class FeaturePreprocessor:
         transformed_cols["has_user_history"] = pc.cast(raw_batch["has_user_history"], pa.float32())
         transformed_cols["is_new_user_destination"] = pc.cast(raw_batch["is_new_user_destination"], pa.float32())
         transformed_cols["is_new_host_connection"] = pc.cast(raw_batch["is_new_host_connection"], pa.float32())
+        transformed_cols["is_new_user_source"] = pc.cast(raw_batch["is_new_user_source"], pa.float32())
+        transformed_cols["is_machine_account"] = pc.cast(raw_batch["is_machine_account"], pa.float32())
 
         # 4. Transformed categorical IDs
         # Column mappings:

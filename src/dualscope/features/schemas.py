@@ -32,6 +32,8 @@ RAW_FEATURE_SCHEMA = pa.schema(
         ("prior_user_destination_count_24h", pa.int64()),
         ("is_new_user_destination", pa.bool_()),
         ("is_new_host_connection", pa.bool_()),
+        ("is_new_user_source", pa.bool_()),
+        ("is_machine_account", pa.bool_()),
         ("history_complete_1h", pa.bool_()),
         ("history_complete_24h", pa.bool_()),
         ("dataset_day", pa.int32()),
@@ -71,6 +73,8 @@ TRANSFORMED_FEATURE_SCHEMA = pa.schema(
         ("has_user_history", pa.float32()),
         ("is_new_user_destination", pa.float32()),
         ("is_new_host_connection", pa.float32()),
+        ("is_new_user_source", pa.float32()),
+        ("is_machine_account", pa.float32()),
         # Transformed categorical ID model inputs
         ("auth_type_id", pa.int32()),
         ("logon_type_id", pa.int32()),
