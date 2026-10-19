@@ -1,4 +1,4 @@
-"""Experiment features-v2, Option A: freeze the final fusion model (docs/experiment_features_v2.md).
+"""Experiment features-v2, Option A: freeze the final fusion model (docs/evaluation/experiment_features_v2.md).
 
 Refits the model that met the Option A success rule (HistGradientBoosting,
 settings unchanged) on all validation days 8-16 and writes it with a manifest
@@ -77,7 +77,7 @@ def main() -> int:
     gru_manifest = json.loads((args.gru_run / "run_manifest.json").read_text(encoding="utf-8"))
     manifest = {
         "model": MODEL,
-        "experiment": "features-v2 Option A, final fusion model (docs/experiment_features_v2.md)",
+        "experiment": "features-v2 Option A, final fusion model (docs/evaluation/experiment_features_v2.md)",
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "git_revision": git_revision(),
         "sklearn_version": sklearn.__version__,

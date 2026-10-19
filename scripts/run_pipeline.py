@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the DualScope pipeline end to end (Task 8.1); see docs/pipeline_runner.md.
+"""Run the DualScope pipeline end to end (Task 8.1); see docs/running/pipeline_runner.md.
 
 Examples:
   python scripts/run_pipeline.py --profile sample

@@ -37,7 +37,7 @@ The Task 2.4 raw and transformed feature schemas also preserve `source_reference
 
 ## Demonstration and focused tests
 
-Follow the [development environment setup](environment_setup.md) to create the Python 3.11, 3.12, or 3.13 virtual environment and install `requirements.txt`. From the repository root, run the synthetic incident trace:
+Follow the [development environment setup](../running/environment_setup.md) to create the Python 3.11, 3.12, or 3.13 virtual environment and install `requirements.txt`. From the repository root, run the synthetic incident trace:
 
 ```powershell
 python scripts/trace_evidence.py

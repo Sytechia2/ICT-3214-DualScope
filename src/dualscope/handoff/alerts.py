@@ -1,6 +1,6 @@
 """Daily alert queue and incident records from the final model's test scores.
 
-The final model (docs/supervised_fusion.md) was tested once on days 17-30 at a
+The final model (docs/evaluation/supervised_fusion.md) was tested once on days 17-30 at a
 budget of 38 alerts per day. These helpers rebuild exactly those 532 alerts
 from ``final_test_scores.parquet`` and group them into per-user incidents for
 the investigation (6.x) and dashboard (7.x) work. They only read stored scores;

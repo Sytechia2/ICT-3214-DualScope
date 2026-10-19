@@ -1,6 +1,6 @@
 # Final-model alert handoff (days 17–30)
 
-Input for GenAI investigation (Tasks 6.x) and the analyst dashboard (Tasks 7.x). These are the 532 alerts the final model raised in the one-time final test: the top 38 user-hours per day on days 17–30 (see [supervised_fusion.md](supervised_fusion.md)). Nothing is re-scored, so building this package does not rerun the test.
+Input for GenAI investigation (Tasks 6.x) and the analyst dashboard (Tasks 7.x). These are the 532 alerts the final model raised in the one-time final test: the top 38 user-hours per day on days 17–30 (see [supervised_fusion.md](../evaluation/supervised_fusion.md)). Nothing is re-scored, so building this package does not rerun the test.
 
 ## Build it
 

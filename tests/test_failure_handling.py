@@ -1,7 +1,7 @@
 """Interface and failure-handling tests (Task 8.2).
 
 Each test records the expected outcome of one failure case from
-``docs/interface_failure_tests.md``: malformed records, schema problems,
+``docs/release/interface_failure_tests.md``: malformed records, schema problems,
 missing detector scores, missing graph context, empty retrieval, model
 failures, timestamp and window conversions, evidence links, stage isolation
 in the runner and the test-day guard. Everything here is synthetic or uses

@@ -1,6 +1,6 @@
 # Runtime and resource use (Task 8.3)
 
-This page tells you how long each part of DualScope takes and what it needs, so you can choose what to run. The setup steps are in [user_manual.md](user_manual.md).
+This page tells you how long each part of DualScope takes and what it needs, so you can choose what to run. The setup steps are in [user_manual.md](../user_manual.md).
 
 Short version: everything a reviewer needs to check the code runs from the submission alone in about ten minutes (setup, tests, sample pipeline, dashboard). The larger runs need the LANL download or Google Cloud access, and their times are given so you can decide whether to run them.
 
@@ -15,13 +15,13 @@ All times were measured on the development laptop described below unless the las
 | **Tests:** `python -m pytest -q` | Setup only | 1.5 to 2.1 minutes (1.0 minute with `-m "not slow"`) | about 1 GB | none | Measured |
 | **Sample pipeline:** `python scripts/run_pipeline.py --profile sample` | Setup only (the 4 MB subset is in the repository) | 35 seconds of stages, about 43 seconds in all; a rerun takes 6.5 seconds | 0.9 GB | 38 MB | Measured, twice |
 | **Dashboard on the sample run** | Sample pipeline done | starts in 1.7 seconds; the first page renders in about 4 seconds | 0.2 to 0.3 GB | none | Measured |
-| **Dashboard on the shared final-test package** | The alert and Gemini folders from the team drive (about 45 MB) | first page renders in about 8 seconds | 0.3 GB | none | Measured |
+| **Dashboard on the shared final-test package** | The alert and Gemini zip files from the project's Google Drive (about 10 MB) | first page renders in about 8 seconds | 0.3 GB | none | Measured |
 | **Full pipeline, reusing the outputs of record:** `--profile full` | The processed data, features, scores and stored runs of the development machine (about 33 GB, not in the submission) | 8 minutes | 8.8 GB | 87 MB | Measured |
 | **Full pipeline from raw data:** `--profile full --auth ... --redteam ...` | Download of `auth.txt.gz` (7.6 GB) and `redteam.txt.gz`; 32 GB RAM; about 80 GB free disk | about 4 hours with extracted text and the ingestion inspection file; about 7 hours with the gzip file | close to all of 31 GB during the feature build | about 40 GB new, plus 7.6 GB download and 34.9 GB if you extract it | Ingestion and features from the logs of the original build; the rest measured; the single-worker figure is an estimate |
 | **LLM investigations for 497 incidents:** `--llm` | Google Cloud login with Vertex AI access | about 66 minutes with 8 workers | low | 38 MB | From the run log |
 | **Retraining the GRU** (not part of the runner) | Full feature build | about 7.5 minutes of CPU training | not recorded | small | From the training log |
 
-Which of these a reviewer can run from the submission alone: setup, smoke check, tests, sample pipeline and the dashboard on the sample run. The dashboard on the final-test package also needs the two folders from the team drive (see the manual). The full pipeline and the LLM run need data or credentials that are not in the submission. Their stored results are included so that nothing has to be rerun to see them.
+Which of these a reviewer can run from the submission alone: setup, smoke check, tests, sample pipeline and the dashboard on the sample run. The dashboard on the final-test package also needs two zip files from the project's Google Drive (see the manual). The full pipeline and the LLM run need data or credentials that are not in the submission. Their stored results are included so that nothing has to be rerun to see them.
 
 ## Hardware and software used
 
@@ -82,7 +82,7 @@ Command: `python scripts/run_pipeline.py --profile sample` into an empty run dir
 | Total of stages | 35.9 | 34.8 | 0.9 GB |
 | Wall clock, including interpreter start | 42.9 | 42.0 | |
 
-A second invocation with the same run directory skips all six stages and takes 6.5 seconds. The run directory is 38 MB. `docs/pipeline_runner.md` lists an earlier run of 32 seconds; the difference is normal variation between runs.
+A second invocation with the same run directory skips all six stages and takes 6.5 seconds. The run directory is 38 MB. `docs/running/pipeline_runner.md` lists an earlier run of 32 seconds; the difference is normal variation between runs.
 
 The ingest stage runs with one worker at about 48,000 events per second (526,922 events in 11 to 13 seconds including start-up). This rate is the basis for the single-worker estimate for the full data below.
 
@@ -125,13 +125,13 @@ Memory during the feature build: the memory log `logs/build_v2_01_30_memory.log`
 Two points about starting from the raw file:
 
 * The 4-worker ingestion seeks by byte offset, so it needs `auth.txt` extracted (34.9 GB for days 1 to 30) and the inspection file `data/manifests/lanl_auth_inspection.json`, which the full profile passes automatically. The inspection itself ran in 329 seconds on the original file.
-* `auth.txt.gz` can be read only with `--workers 1`. The runner passes the same `--workers` value to the feature build, which then also runs with one worker (about 4 hours by the estimate in [lanl_features.md](lanl_features.md)).
+* `auth.txt.gz` can be read only with `--workers 1`. The runner passes the same `--workers` value to the feature build, which then also runs with one worker (about 4 hours by the estimate in [lanl_features.md](../data/lanl_features.md)).
 
 A rebuild writes into the run directory and never changes `data/processed/` or the outputs of record.
 
 ### One-time test (not repeatable)
 
-The final test on days 17 to 30 scored 5,537,311 user-hours once, on 2026-10-06 (GRU 28 to 57 seconds per day, 427 seconds cumulative; hourly counts 7 to 11 seconds per day). It must not be rerun and the runner refuses to score these days. The alert package export from the stored scores takes about 30 seconds ([alert_handoff.md](alert_handoff.md)).
+The final test on days 17 to 30 scored 5,537,311 user-hours once, on 2026-10-06 (GRU 28 to 57 seconds per day, 427 seconds cumulative; hourly counts 7 to 11 seconds per day). It must not be rerun and the runner refuses to score these days. The alert package export from the stored scores takes about 30 seconds ([alert_handoff.md](../investigation/alert_handoff.md)).
 
 ### Training times
 

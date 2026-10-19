@@ -1,8 +1,8 @@
-# DualScope user manual (draft for Tasks 8.4 and 10.2)
+# DualScope user manual
 
 DualScope ranks the most unusual user-hours in Windows login logs from the LANL dataset, groups them into incidents, and shows each incident to an analyst with its evidence and an optional AI summary. This manual takes you from a fresh copy of the code to a working dashboard.
 
-How long each step takes and what it needs is in [runtime_and_resources.md](runtime_and_resources.md). Read its first table before you choose what to run.
+How long each step takes and what it needs is in [runtime_and_resources.md](running/runtime_and_resources.md). Read its first table before you choose what to run.
 
 Commands are given for Windows PowerShell first. Where macOS or Linux differ, the line is marked. Commands marked **not verified here** need things that were not available when this manual was written (Google Cloud access, the full raw data, another operating system).
 
@@ -11,7 +11,7 @@ Commands are given for Windows PowerShell first. Where macOS or Linux differ, th
 | Goal | Needs | Time |
 |---|---|---|
 | Install, run the tests, run the sample pipeline, open the dashboard on the sample | Only this repository | About 15 minutes |
-| Open the dashboard on the final-test alerts and stored AI summaries | Two folders from the team drive (section 5) | A minute on top |
+| Open the dashboard on the final-test alerts and stored AI summaries | Two zip files from the project's Google Drive (section 6) | A minute on top |
 | Rerun the full pipeline from the raw LANL files | The LANL download (7.6 GB), 32 GB RAM, about 80 GB disk | 4 to 7 hours |
 | Make new AI summaries | A Google Cloud login with Vertex AI access | About 1 hour for all 497 incidents |
 
@@ -92,7 +92,7 @@ All selected stages finished.
 
 The score stage prints `release warning: torch ... is installed; the release was made with 2.11.0+cu128`. This is expected: the packages are installed at their newest allowed versions and the scores are computed on the CPU. The run still finishes, and the stored model files pass their hash check.
 
-The last lines of the output give the command that opens the dashboard on this run. Running the same command again skips every stage that is up to date (about 7 seconds). Use `--force` to run everything again, or `--from features` to start at one stage. Details are in [pipeline_runner.md](pipeline_runner.md).
+The last lines of the output give the command that opens the dashboard on this run. Running the same command again skips every stage that is up to date (about 7 seconds). Use `--force` to run everything again, or `--from features` to start at one stage. Details are in [pipeline_runner.md](running/pipeline_runner.md).
 
 Everything goes into `outputs/pipeline/sample`. The run is a check that the parts fit together. Its scores are not an accuracy result, because only 260 users are in the slice.
 
@@ -112,7 +112,7 @@ If the `streamlit` command is not found, the virtual environment is not active. 
 
 ### On the final-test alerts with the stored AI summaries
 
-These are the alerts of days 17 to 30 and the stored Gemini summaries. They are too large for Git, so they come as two zip files from the team drive: `handoff.zip` and `investigations.zip`. Unzip both into the `outputs` folder of the repository, so that these paths exist:
+These are the alerts of days 17 to 30 and the stored Gemini summaries. They are too large for Git, so they are kept as two zip files in the [project's Google Drive folder](https://drive.google.com/drive/folders/1uccDsuaxZahnTwdyiIGJIW2MzZ1dBQdq?usp=sharing), under `Final Model/outputs`: `handoff.zip` and `investigations.zip`. The file `google_drive_contents.txt`, which comes with the submission, lists everything in that folder. Unzip both into the `outputs` folder of the repository, so that these paths exist:
 
 ```text
 outputs/handoff/final_test_alerts_v1/incidents.jsonl      (with alerts.parquet, events.parquet, manifest.json)
@@ -206,7 +206,7 @@ It reuses the verified ingestion, feature build, test alerts and Gemini run, and
    The default `--workers 4` cannot read a `.gz` file. The runner stops with a message from the ingestion script if you try.
 3. Needs 32 GB RAM for the feature build and about 80 GB of free disk. The rebuild writes into `outputs/pipeline/full` and never overwrites `data/processed/` or the stored results.
 
-Both routes are **not verified here** because they take hours. The reuse checks and the code path were tested on the development machine. See [lanl_ingestion.md](lanl_ingestion.md) and [lanl_features.md](lanl_features.md) for the underlying scripts.
+Both routes are **not verified here** because they take hours. The reuse checks and the code path were tested on the development machine. See [lanl_ingestion.md](data/lanl_ingestion.md) and [lanl_features.md](data/lanl_features.md) for the underlying scripts.
 
 ## 10. Make new AI summaries (optional)
 
@@ -218,7 +218,7 @@ gcloud config set project <your-project>        # or set the environment variabl
 python scripts/run_pipeline.py --profile sample --only investigate --llm
 ```
 
-The sample run makes about 24 model calls (12 incidents, two modes), uses about 245,000 tokens and should take a couple of minutes (an estimate from the figures in [runtime_and_resources.md](runtime_and_resources.md)). On the full profile, `--llm` generates the 497 test incidents into `outputs/investigations/gemini_v1` (about 66 minutes, about 10 million tokens). Generation can be stopped and restarted; it carries on where it left off and retries failed replies. No key is stored: the code uses your `gcloud` login. See [genai_investigation.md](genai_investigation.md) for the settings and the way summaries are checked.
+The sample run makes about 24 model calls (12 incidents, two modes), uses about 245,000 tokens and should take a couple of minutes (an estimate from the figures in [runtime_and_resources.md](running/runtime_and_resources.md)). On the full profile, `--llm` generates the 497 test incidents into `outputs/investigations/gemini_v1` (about 66 minutes, about 10 million tokens). Generation can be stopped and restarted; it carries on where it left off and retries failed replies. No key is stored: the code uses your `gcloud` login. See [genai_investigation.md](investigation/genai_investigation.md) for the settings and the way summaries are checked.
 
 Without `--llm` the investigation stage is a dry run that makes no calls.
 
@@ -234,11 +234,11 @@ To retrain, run the scripts of the earlier stages. They need the full feature bu
 
 | Step | Script | Guide |
 |---|---|---|
-| Time splits | `scripts/create_lanl_splits.py` | [lanl_splits.md](lanl_splits.md) |
-| Features | `scripts/build_lanl_features.py` | [lanl_features.md](lanl_features.md), [experiment_features_v2.md](experiment_features_v2.md) |
-| Sequence detector (GRU) | `scripts/build_sequences.py`, `scripts/train_sequence_model.py` | [sequence_detector.md](sequence_detector.md) |
-| Graph detector | `scripts/build_graph_snapshots.py`, `scripts/train_graph_model.py` | [graph_detector.md](graph_detector.md) |
-| Fusion model | `scripts/supervised_fusion_validate.py`, `scripts/supervised_fusion_freeze.py` | [supervised_fusion.md](supervised_fusion.md) |
+| Time splits | `scripts/create_lanl_splits.py` | [lanl_splits.md](data/lanl_splits.md) |
+| Features | `scripts/build_lanl_features.py` | [lanl_features.md](data/lanl_features.md), [experiment_features_v2.md](evaluation/experiment_features_v2.md) |
+| Sequence detector (GRU) | `scripts/build_sequences.py`, `scripts/train_sequence_model.py` | [sequence_detector.md](detectors/sequence_detector.md) |
+| Graph detector | `scripts/build_graph_snapshots.py`, `scripts/train_graph_model.py` | [graph_detector.md](detectors/graph_detector.md) |
+| Fusion model | `scripts/supervised_fusion_validate.py`, `scripts/supervised_fusion_freeze.py` | [supervised_fusion.md](evaluation/supervised_fusion.md) |
 
 Training the GRU takes about 7.5 minutes on the CPU once the features exist.
 
@@ -270,10 +270,10 @@ Each stage logs to `outputs/pipeline/<run>/logs/<stage>.log`, and `pipeline_stat
 
 ## 14. Known limitations
 
-* The final model catches 1 of the 39 attack hours of days 17 to 30 at 38 alerts a day. Its pre-set success rule was not met. See [supervised_fusion.md](supervised_fusion.md).
-* Graph results on the test period are retrospective: those days had been looked at during development ([graph_model_evaluation.md](graph_model_evaluation.md)).
-* The sample run uses 260 users, so its scores differ from the full run ([pipeline_runner.md](pipeline_runner.md)).
-* AI summaries are leads. The check confirms that the log lines are consistent with a technique, not that an attack happened. The model is not deterministic, so a new run gives different text ([genai_investigation.md](genai_investigation.md), [investigation_review.md](investigation_review.md)).
-* The fusion score ranks hours. It is not a calibrated probability. Many hours tie at the cut-off ([alert_handoff.md](alert_handoff.md)).
+* The final model catches 1 of the 39 attack hours of days 17 to 30 at 38 alerts a day. Its pre-set success rule was not met. See [supervised_fusion.md](evaluation/supervised_fusion.md).
+* Graph results on the test period are retrospective: those days had been looked at during development ([graph_model_evaluation.md](detectors/graph_model_evaluation.md)).
+* The sample run uses 260 users, so its scores differ from the full run ([pipeline_runner.md](running/pipeline_runner.md)).
+* AI summaries are leads. The check confirms that the log lines are consistent with a technique, not that an attack happened. The model is not deterministic, so a new run gives different text ([genai_investigation.md](investigation/genai_investigation.md), [investigation_review.md](investigation/investigation_review.md)).
+* The fusion score ranks hours. It is not a calibrated probability. Many hours tie at the cut-off ([alert_handoff.md](investigation/alert_handoff.md)).
 * The dashboard shows alerts that were produced earlier. It does not score new logs.
 * Only authentication events are used. Other LANL sources (processes, flows, DNS) are not.

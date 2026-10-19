@@ -8,7 +8,7 @@ later steps can cite the exact evidence. An incident with no matching event
 gets no candidates: ``insufficient_evidence``.
 
 The novelty flags are first appearances since day 1 of the replay
-(docs/lanl_features.md): ``is_new_user_destination`` is the user's first logon
+(docs/data/lanl_features.md): ``is_new_user_destination`` is the user's first logon
 to that destination, ``is_new_host_connection`` the first connection between
 the two computers, and ``is_new_user_source`` the user's first event from that
 source computer. Log-off events are ignored by the novelty rules.

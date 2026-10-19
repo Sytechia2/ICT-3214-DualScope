@@ -1,6 +1,6 @@
 # Tasks 3.1–3.4: Short-term sequence detector
 
-Owner: Member 2 (sequence detector). Code: `src/dualscope/sequence/`. Configuration: [`config/sequence_detector.json`](../config/sequence_detector.json).
+Owner: Member 2 (sequence detector). Code: `src/dualscope/sequence/`. Configuration: [`config/sequence_detector.json`](../../config/sequence_detector.json).
 
 The detector models short-term authentication behaviour of one acting user within one dataset hour. A GRU sequence autoencoder learns to reconstruct presumed-normal training sequences; a user-hour whose events it reconstructs poorly receives a high anomaly score. Scores, statuses and evidence are exported per user-hour for fusion (Member 4), investigation (Member 5) and the dashboard (Member 6).
 
@@ -40,7 +40,7 @@ python scripts/build_sequences.py `
   --sample-output outputs/sequence/tensor_sample/sequence_tensors
 ```
 
-It writes [`data/manifests/lanl_sequences_v1.json`](../data/manifests/lanl_sequences_v1.json) with per-split status counts, fitting-eligible counts, events-per-hour percentiles, chunk counts per candidate `L` and the tracker summary.
+It writes [`data/manifests/lanl_sequences_v1.json`](../../data/manifests/lanl_sequences_v1.json) with per-split status counts, fitting-eligible counts, events-per-hour percentiles, chunk counts per candidate `L` and the tracker summary.
 
 **Result on Days 1–30** (production Task 2.4 features, 508,854,306 events, 348 s):
 
@@ -116,7 +116,7 @@ The transformation is monotonic, maps to `[0, 1)`, never saturates at 1 (so extr
 - the selection record and `test_data_used: false`;
 - a content hash.
 
-`FrozenSequenceDetector.load` rejects a modified record, a changed checkpoint, or mismatched feature or split versions. The tracked [`data/manifests/sequence_detector_v1.json`](../data/manifests/sequence_detector_v1.json) records every trial and the selection.
+`FrozenSequenceDetector.load` rejects a modified record, a changed checkpoint, or mismatched feature or split versions. The tracked [`data/manifests/sequence_detector_v1.json`](../../data/manifests/sequence_detector_v1.json) records every trial and the selection.
 
 ```powershell
 python scripts/select_sequence_model.py `

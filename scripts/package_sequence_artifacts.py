@@ -101,7 +101,7 @@ Use:
   3. Extract each zip at the repository root. Paths inside the archives are
      repository-relative (models/sequence/frozen/..., outputs/sequence_scores/...).
   4. Read scores with dualscope.sequence.export.SequenceScoreStore; see
-     docs/sequence_detector_handoff.md for fields, statuses and alignment rules.
+     docs/detectors/sequence_detector_handoff.md for fields, statuses and alignment rules.
 
 Do not edit files in place. A new model or export gets a new version folder.
 """

@@ -1,4 +1,4 @@
-"""Experiment features-v2, Option A: one-shot final test on days 17-30 (docs/experiment_features_v2.md).
+"""Experiment features-v2, Option A: one-shot final test on days 17-30 (docs/evaluation/experiment_features_v2.md).
 
 Scores every test user-hour with the frozen fusion model and the comparators,
 saves the scores, and only then reads the test red-team labels. Before any test
@@ -143,7 +143,7 @@ def main() -> int:
         "gru_humans_only": "gru_humans_only", "rule_either_humans_only": "either_humans_only",
     }
     results: dict = {
-        "experiment": "features-v2 Option A, final test (docs/experiment_features_v2.md)",
+        "experiment": "features-v2 Option A, final test (docs/evaluation/experiment_features_v2.md)",
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "frozen_model": {"dir": str(args.frozen_dir), "sha256": manifest["model_sha256"], "git_revision": manifest["git_revision"]},
         "test_days": test_days,

@@ -40,7 +40,7 @@ The 54 MB bundle is kept in `data/raw/attack/` and is not committed. ATT&CK is Â
 | `network_logon_to_new_destination` | network logon to a never-reached destination | T1021.002 SMB/Windows Admin Shares, T1021 Remote Services |
 | `logon_from_new_source` | the user's first event from that source computer | T1078 Valid Accounts |
 
-"Never before" means since day 1 of the data (see [lanl_features.md](lanl_features.md)). Log-off events are ignored by the three novelty rules. A log-off is recorded on the machine being left, often with source = destination, so it does not show a new logon path; counting log-offs made `logon_from_new_source` fire on 438 incidents instead of 232.
+"Never before" means since day 1 of the data (see [lanl_features.md](../data/lanl_features.md)). Log-off events are ignored by the three novelty rules. A log-off is recorded on the machine being left, often with source = destination, so it does not show a new logon path; counting log-offs made `logon_from_new_source` fire on 438 incidents instead of 232.
 
 There is no Kerberos-ticket template. Ticket requests (TGS/TGT) are about 16% of events in alerted hours and have no novelty flag that sets them apart.
 

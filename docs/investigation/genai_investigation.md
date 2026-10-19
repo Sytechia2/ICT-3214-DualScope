@@ -240,4 +240,4 @@ The evaluation against reference labels is in [investigation_review.md](investig
 - The verifier's Supported status is not a correctness label. Check a sample of Supported and Uncertain by hand.
 - Report failed and invalid replies and incidents with no mapping, not only the mapped ones.
 - Do not quote the red-team example as a success rate: it is one incident.
-- Reviewer sample, label sheets and labelling rules for this task: [docs/investigation_review.md](investigation_review.md).
+- Reviewer sample, label sheets and labelling rules for this task: [docs/investigation/investigation_review.md](investigation_review.md).

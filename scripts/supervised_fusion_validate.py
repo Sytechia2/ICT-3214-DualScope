@@ -1,4 +1,4 @@
-"""Experiment features-v2, Option A: supervised fusion quick test (docs/experiment_features_v2.md).
+"""Experiment features-v2, Option A: supervised fusion quick test (docs/evaluation/experiment_features_v2.md).
 
 One row per validation user-hour (acting user, hour), days 8-16. Inputs are
 label-free and contain no user or computer names:
@@ -118,7 +118,7 @@ def main() -> int:
           f"evaluation days 13-16: {len(test):,} user-hours, {int(test['label'].sum())} positive")
 
     results: dict = {
-        "experiment": "features-v2 Option A: supervised fusion (docs/experiment_features_v2.md)",
+        "experiment": "features-v2 Option A: supervised fusion (docs/evaluation/experiment_features_v2.md)",
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "train_days": list(TRAIN_DAYS),
         "evaluation_days": list(EVAL_DAYS),

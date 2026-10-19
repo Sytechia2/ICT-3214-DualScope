@@ -1,4 +1,4 @@
-"""Experiment features-v2 (docs/experiment_features_v2.md, steps 4-5): compare trained sequence runs on validation days.
+"""Experiment features-v2 (docs/evaluation/experiment_features_v2.md, steps 4-5): compare trained sequence runs on validation days.
 
 For each ``--run NAME=RUN_DIR`` the trained checkpoint scores every available
 validation user-hour (days 8-16). With ``--scaled NAME`` the run is also scored
@@ -114,7 +114,7 @@ def main() -> int:
     print(f"Validation days {validation_days}; positive user-hours: {len(positives)}")
 
     results: dict = {
-        "experiment": "features-v2 (docs/experiment_features_v2.md)",
+        "experiment": "features-v2 (docs/evaluation/experiment_features_v2.md)",
         "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "features": inputs.feature_info(),
         "validation_days": validation_days,
