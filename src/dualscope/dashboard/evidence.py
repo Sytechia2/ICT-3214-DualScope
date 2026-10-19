@@ -1,7 +1,7 @@
 """Prepare an incident's event evidence for the Task 7.2 panels.
 
 Events come from the ``events.parquet`` written next to ``incidents.jsonl`` by
-``scripts/export_alert_handoff.py`` (docs/alert_handoff.md). An incident's
+``scripts/export_alert_handoff.py`` (docs/investigation/alert_handoff.md). An incident's
 events are the rows whose ``source_reference`` is in its
 ``source_references``. Exports without an events file still show their
 references, just not the event details.
@@ -59,7 +59,7 @@ def incident_events(events: pd.DataFrame, incident: Mapping[str, Any]) -> tuple[
 
 def _novel(rows: pd.DataFrame, column: str) -> pd.Series:
     # Log-offs are recorded on the machine being left, so their novelty flags
-    # do not show a new logon path (same rule as docs/attack_retrieval.md).
+    # do not show a new logon path (same rule as docs/investigation/attack_retrieval.md).
     return rows[column].astype(bool) & (rows["authentication_orientation"] != "LogOff")
 
 

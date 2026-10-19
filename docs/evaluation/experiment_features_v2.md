@@ -84,7 +84,7 @@ Implementation:
 - `features/schemas.py`, `features/config.py`: new columns. New `config/lanl_features_v2.json` with `feature_version` `2.0.0` and the two binary inputs added. v1 config untouched.
 - `sequence/config.py`: model inputs currently hard-coded from `DEFAULT_MODEL_INPUTS_*` (`config.py:28-30`). Make them come from the sequence config (new `inputs` block), defaulting to the v1 list so v1 is unchanged.
 - **Bug risk:** the training-sample cache key (`pipeline.py:133`) contains the preprocessing hash, split fingerprint and excluded users, **but not the input list**. Add the input list (or the sequence config fingerprint) to the key, otherwise runs A and B could silently share a cached sample with the wrong columns.
-- Tests: extend `tests/test_lanl_features.py` with the hand-worked example in `docs/lanl_features.md` (expected `is_new_user_source` per event, a `$` account and an `@`-less name). Add a cache-key test.
+- Tests: extend `tests/test_lanl_features.py` with the hand-worked example in `docs/data/lanl_features.md` (expected `is_new_user_source` per event, a `$` account and an `@`-less name). Add a cache-key test.
 
 **Verify**
 - [ ] Hand-worked example values match.

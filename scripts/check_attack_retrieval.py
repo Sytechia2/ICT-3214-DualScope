@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the documented ATT&CK retrieval samples and record their results (Task 6.1).
 
-Part 1 runs the fixed sample queries in docs/attack_retrieval.md and fails if a
+Part 1 runs the fixed sample queries in docs/investigation/attack_retrieval.md and fails if a
 query no longer returns its expected top technique (or, for the
 insufficient-evidence samples, returns anything). Part 2, when the alert
 handoff package exists, applies the behaviour templates to a few real days

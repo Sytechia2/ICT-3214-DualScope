@@ -38,7 +38,7 @@ git checkout experiment/features-v2
 git pull
 ```
 
-**0. Data.** You need the ingested LANL data in `data/processed/lanl_auth_days_01_30/` (with `authentication/events` and `redteam_labels/labels`). Member 2 has it. If you don't, follow [lanl_ingestion.md](lanl_ingestion.md).
+**0. Data.** You need the ingested LANL data in `data/processed/lanl_auth_days_01_30/` (with `authentication/events` and `redteam_labels/labels`). Member 2 has it. If you don't, follow [lanl_ingestion.md](../data/lanl_ingestion.md).
 
 **1. Features, days 1–30** (about 1.5–3 h):
 ```powershell

@@ -1,94 +1,83 @@
 # DualScope
 
-Multi-timescale intrusion detection using sequence and graph-based behavioural analysis, on the LANL authentication dataset.
+DualScope looks for intruders in Windows login logs. It reads the authentication events of the LANL "Comprehensive, Multi-Source Cyber-Security Events" dataset, ranks each user's hours by how unusual they look, and turns the most unusual hours into incidents. An analyst can open each incident in a dashboard, follow it back to the original log lines, and read an AI summary that has been checked against those lines.
 
-The work plan (WBS and detailed task guide) is kept outside the repository; task numbers below follow it. The scope checklist is [docs/scope_checklist.md](docs/scope_checklist.md) and environment setup is [docs/environment_setup.md](docs/environment_setup.md).
+## How it works
 
-## Quick start
+1. **Ingest.** The raw `auth.txt` log is converted to Parquet. Every event keeps a reference to its line in the original file (`auth.txt:<line>`), so any result can be traced back to the source.
+2. **Build features.** Each user's events are grouped by hour and described with counts and history, such as first-time logins to a computer. Days 1–7 are used for training, days 8–16 for validation and days 17–30 for the final test.
+3. **Score.** Two detectors look at the data on different time scales. A GRU autoencoder learns the normal order of a user's logins within an hour and scores how far an hour strays from it. A graph autoencoder looks at which users log in to which computers each day. A gradient-boosting model then combines the GRU score with hourly login counts into one ranking score. The graph detector was studied in depth but is not part of the final model.
+4. **Raise alerts.** The 38 highest-scoring user-hours of each day become alerts, and alerts close together for the same user are grouped into incidents.
+5. **Investigate.** For each incident, Google Gemini writes a summary and suggests matching MITRE ATT&CK techniques. A rule-based check, which uses no AI, then marks each technique as supported, uncertain or rejected, based on whether the cited log lines show that behaviour.
+6. **Review.** A Streamlit dashboard shows the daily alert queue, each incident's timeline and connections, and its checked AI summary.
 
-Step-by-step instructions are in [docs/user_manual.md](docs/user_manual.md). Times and resource needs for every run are in [docs/runtime_and_resources.md](docs/runtime_and_resources.md). Needs Python 3.11 to 3.13; no GPU, no LANL download and no credentials.
+## Results
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1                 # macOS/Linux: source .venv/bin/activate
-python -m pip install -r requirements.txt      # about 5 minutes (mostly PyTorch)
-python -m pytest -q                            # about 1.5 to 2 minutes; add -m "not slow" for about 1 minute
-python scripts/run_pipeline.py --profile sample   # about 45 seconds, peak 0.9 GB, writes outputs/pipeline/sample
-streamlit run scripts/incident_dashboard.py -- --incidents outputs/pipeline/sample/alerts/incidents.jsonl --investigations outputs/pipeline/sample/investigations   # starts in a few seconds
-```
+The final model was fitted on the validation days and tested once on days 17–30. The test days are never scored again.
 
-The full pipeline (`--profile full`) reuses stored outputs and takes about 8 minutes on a machine that holds them; rebuilding from the raw LANL files takes 4 to 7 hours. Making new AI summaries (`--llm`) needs a Google Cloud login. Both are optional.
-
-## Current status (2026-10-06)
-
-### Headline result
-
-The final detection model is a **supervised fusion** (gradient boosting on the GRU score and hourly authentication counts), fitted on validation labels and tested once on Days 17–30. See [docs/supervised_fusion.md](docs/supervised_fusion.md).
-
-| Days 13–16 (validation, 136 attack hours) | Caught at 38 alerts/day | AP |
+| Days 13–16 (validation, 136 attack hours) | Attack hours caught at 38 alerts a day | Average precision |
 | --- | ---: | ---: |
 | GRU alone | 4 | 0.0046 |
-| Final model | 16 (13–18 under numeric noise) | 0.050 |
+| Final model | 16 | 0.050 |
 
-| Days 17–30 (test, run once, 39 attack hours) | Caught at 38 alerts/day | AP |
+| Days 17–30 (test, 39 attack hours) | Attack hours caught at 38 alerts a day | Average precision |
 | --- | ---: | ---: |
 | GRU alone | 0 | 0.00020 |
 | Final model | 1 | 0.00124 |
 
-The model ranks attacks much better than the GRU on unseen days, but at 38 alerts per day it catches almost none of the test-period attacks; its pre-set primary success rule was not met.
+The final model ranks attacks well above the GRU on days it has never seen, but at 38 alerts a day it catches only 1 of the 39 attack hours in the test period, so the success target set before the test was not met. An Isolation Forest baseline caught none of the attack hours in either period. The full comparison is in [docs/evaluation/model_comparison_matrix.md](docs/evaluation/model_comparison_matrix.md) and [docs/evaluation/supervised_fusion.md](docs/evaluation/supervised_fusion.md).
 
-### By work package
+## Getting started
 
-- **Data (2.1–2.5):** Days 1–30 of LANL authentication, 508,854,306 events and 749 red-team label rows, normalised with exact reconciliation; chronological split into training (Days 1–7), validation (Days 8–16) and test (Days 17–30); shared causal historical features; `auth.txt:<line>` evidence references throughout. See [lanl_ingestion.md](docs/lanl_ingestion.md), [lanl_splits.md](docs/lanl_splits.md), [lanl_features.md](docs/lanl_features.md), [evidence_references.md](docs/evidence_references.md).
-- **Short-term sequence detector (3.1–3.4):** GRU autoencoder over user-hour event sequences, frozen; validation AP 0.0060 (102× prevalence), ROC-AUC 0.88. See [sequence_detector.md](docs/sequence_detector.md) and [sequence_detector_handoff.md](docs/sequence_detector_handoff.md).
-- **Long-term graph detector (4.1–4.4):** graph autoencoder over daily user–computer graphs, plus a separate confirmed-relationship signature layer. Its reported test-period results (GAE F1 0.077; signature layer F1 0.84) are retrospective, because the test days had been inspected during development. See [graph_detector.md](docs/graph_detector.md), [graph_model_evaluation.md](docs/graph_model_evaluation.md), [graph_detector_handoff.md](docs/graph_detector_handoff.md).
-- **Fusion and incidents (5.1–5.4):** alignment, maximum/average/temporal fusion and incident records with signature tagging and evidence.
-- **Evaluation (9.1–9.4):** protocol ([evaluation_protocol.md](docs/evaluation_protocol.md)); comparison of all detectors and fusions on Days 13–16 at the same budget ([model_comparison_matrix.md](docs/model_comparison_matrix.md)); detection timing, precedence and errors with data-driven case studies ([detection_timing_and_errors.md](docs/detection_timing_and_errors.md)); the final model and test ([supervised_fusion.md](docs/supervised_fusion.md), full record in [experiment_features_v2.md](docs/experiment_features_v2.md)). The flat-feature Isolation Forest baseline (9.2) is the weakest detector: 0 of 136 attack hours on Days 13–16 and 0 of 39 on Days 17–30 at 38 alerts/day.
-- **End-to-end runner (8.1):** `python scripts/run_pipeline.py --profile sample` takes the tracked subset in `data/samples/lanl_pipeline_subset` through ingestion, features, scoring with the frozen release model in `models/release`, alerts, investigation evidence and a dashboard check; `--profile full` reproduces the run of record and reuses verified outputs. See [docs/pipeline_runner.md](docs/pipeline_runner.md).
-- **GenAI investigation, dashboard and reliability review (6.x, 7.x, 9.5):** ATT&CK retrieval, Gemini summaries with an automatic evidence check, the analyst dashboard and the reviewer sample are in the repository. See [docs/genai_investigation.md](docs/genai_investigation.md), [docs/attack_retrieval.md](docs/attack_retrieval.md), [docs/investigation_review.md](docs/investigation_review.md) and the dashboard section below.
-- **Runtime and user manual (8.3, 8.4):** [docs/runtime_and_resources.md](docs/runtime_and_resources.md) and [docs/user_manual.md](docs/user_manual.md).
-
-Large data, feature builds, model checkpoints, scores and logs are not stored in Git; each guide says where they come from or how to rebuild them.
-
-## Quick smoke check
-
-From the repository root, after creating the environment described in `docs/environment_setup.md`:
+You need Python 3.11, 3.12 or 3.13. The quick start below needs no GPU, no LANL download and no cloud account.
 
 ```powershell
-python scripts/smoke_test.py
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1                       # macOS/Linux: source .venv/bin/activate
+python -m pip install -r requirements.txt          # about 5 minutes, mostly PyTorch
+python scripts/smoke_test.py                       # quick install check
+python -m pytest -q                                # full test suite, a few minutes
+python scripts/run_pipeline.py --profile sample    # about 45 seconds
+streamlit run scripts/incident_dashboard.py -- --incidents outputs/pipeline/sample/alerts/incidents.jsonl --investigations outputs/pipeline/sample/investigations
 ```
 
-The smoke check uses only the tracked synthetic fixture and does not require LANL data, model checkpoints or external service credentials.
+The sample run takes a small slice of the LANL log that is stored in this repository (526,922 events from 260 users) through every stage, using the frozen models in `models/release/`. It checks that the parts fit together. Its scores are not an accuracy result.
 
-## Incident dashboard (Tasks 7.1 and 7.2)
+The [user manual](docs/user_manual.md) covers everything else, step by step: opening the dashboard on the final-test alerts and stored AI summaries, rerunning the full pipeline from the raw LANL files, making new AI summaries, retraining the models, and troubleshooting. How long each run takes and how much memory it needs is in [docs/running/runtime_and_resources.md](docs/running/runtime_and_resources.md).
 
-Install `requirements.txt`, then launch the read-only analyst dashboard from the repository root:
+## Documentation
 
-```powershell
-streamlit run scripts/incident_dashboard.py
-```
+| Topic | Documents |
+| --- | --- |
+| Using DualScope | [User manual](docs/user_manual.md), [runtime and resources](docs/running/runtime_and_resources.md), [pipeline runner](docs/running/pipeline_runner.md), [environment setup](docs/running/environment_setup.md) |
+| Data | [Ingestion](docs/data/lanl_ingestion.md), [time splits](docs/data/lanl_splits.md), [features](docs/data/lanl_features.md), [evidence references](docs/data/evidence_references.md) |
+| Detectors | [Sequence detector (GRU)](docs/detectors/sequence_detector.md), [graph detector](docs/detectors/graph_detector.md), [graph evaluation](docs/detectors/graph_model_evaluation.md), [graph overfitting check](docs/detectors/graph_overfitting.md) |
+| Final model and evaluation | [Evaluation protocol](docs/evaluation/evaluation_protocol.md), [model comparison](docs/evaluation/model_comparison_matrix.md), [final model](docs/evaluation/supervised_fusion.md), [feature experiment record](docs/evaluation/experiment_features_v2.md), [detection timing and errors](docs/evaluation/detection_timing_and_errors.md) |
+| Alerts and investigation | [Alert package](docs/investigation/alert_handoff.md), [ATT&CK retrieval](docs/investigation/attack_retrieval.md), [AI investigation](docs/investigation/genai_investigation.md), [review of the AI summaries](docs/investigation/investigation_review.md) |
+| Testing and release | [Failure handling tests](docs/release/interface_failure_tests.md), [release validation](docs/release/release_validation.md) |
 
-It opens the tracked **Synthetic fixture** (`data/fixtures/incidents_mock.jsonl`) by default. These records and their score and evidence fields are illustrative, not detector results, traceable evidence, or a live feed. Select **Local JSONL export** in the sidebar and enter a local path to view a saved full incident export from `scripts/align_and_fuse_scores.py --incidents-output <path>.jsonl`. The dashboard identifies this as a saved file, not a live feed, and reports missing or malformed files without switching to the fixture. Incident times are dataset-relative seconds, with half-open `[start, end)` ranges. The dashboard consumes packaged incidents only; it does not run detectors. The current Parquet incident export omits nested detector scores, so this dashboard accepts JSONL.
-
-Select **Alert handoff package** to open the final model's days 17–30 alerts (`outputs/handoff/final_test_alerts_v1/incidents.jsonl`, built by `scripts/export_alert_handoff.py`; see `docs/alert_handoff.md`). An incident's detail view then adds the Task 7.2 evidence panels:
-
-- **Alerted hours:** rank, tie status and scores per hour.
-- **Authentication events:** a time-ordered timeline of every cited event; selecting a row shows its full source record.
-- **User–host relationships:** one row per source → destination pair, with first-time pairs listed first.
-- **Graph detector context:** labelled as not used by the final model.
-
-Event details come from `events.parquet` in the same folder as the incident file; without it, the view lists the event references only. The red-team answer key stays hidden unless **Show answer key (evaluation only)** is switched on in the sidebar.
-
-## Planned top-level layout
+## Repository layout
 
 ```text
-config/       Shared configuration templates
-data/         Tracked fixtures/samples; ignored raw and full processed local data
-docs/         Scope, setup and technical documentation
-logs/         Ignored run logs
-models/       Ignored checkpoints and model artifacts
-outputs/      Ignored predictions, incidents and reports
-scripts/      Repeatable developer and pipeline commands
-src/          Application packages
-tests/        Automated tests
+config/     Configuration template
+data/       Small samples, fixtures, manifests and reference data (the full LANL data is not stored here)
+docs/       Technical documentation and the user manual
+models/     Frozen release models in models/release/, with a manifest of file hashes
+scripts/    Command-line entry points: pipeline runner, training, evaluation, dashboard
+src/        The dualscope Python package
+tests/      Automated tests
 ```
+
+The full LANL data, the processed data, intermediate model runs, scores and logs are too large for Git. `outputs/`, `logs/` and most of `data/` and `models/` are ignored. The larger data and results are kept in a [shared Google Drive folder](https://drive.google.com/drive/folders/1uccDsuaxZahnTwdyiIGJIW2MzZ1dBQdq?usp=sharing), listed in [google_drive_contents.txt](google_drive_contents.txt). The user manual explains when each one is needed and how to rebuild it.
+
+## Limitations
+
+* At 38 alerts a day the final model catches 1 of 39 attack hours in the test period.
+* The final model was fitted on labelled attacks, which a real organisation would not normally have, and it would need retraining for another network.
+* Graph detector results on the test period are retrospective, because those days had been looked at during development.
+* AI summaries are starting points for an analyst. The check confirms that the log lines match a technique, and the analyst still decides whether it was an attack.
+* Only authentication events are used. The dataset's process, network flow and DNS logs are not.
+
+## Data
+
+The dataset is the Los Alamos National Laboratory "Comprehensive, Multi-Source Cyber-Security Events" collection (A. D. Kent, 2015, DOI [10.17021/1179829](https://doi.org/10.17021/1179829)), available from <https://csr.lanl.gov/data/cyber1/>. The small slices stored in this repository are cut from it.

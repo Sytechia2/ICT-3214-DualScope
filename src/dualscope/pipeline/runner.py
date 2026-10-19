@@ -5,7 +5,7 @@ into its own folder of the run directory, and keeps ``pipeline_state.json``
 with what every stage did. The ``sample`` profile starts from the tracked
 subset in ``data/samples/lanl_pipeline_subset`` and the ``full`` profile
 reproduces the run of record, reusing verified outputs that already exist.
-``docs/pipeline_runner.md`` describes the stages, reuse rules and failure
+``docs/running/pipeline_runner.md`` describes the stages, reuse rules and failure
 behaviour.
 
 Stage records. ``status`` is what happened in the latest invocation: ``done``,
@@ -975,7 +975,7 @@ def final_report(result: RunResult, profile: str, llm: bool) -> str:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the DualScope pipeline end to end (Task 8.1). See docs/pipeline_runner.md.")
+    parser = argparse.ArgumentParser(description="Run the DualScope pipeline end to end (Task 8.1). See docs/running/pipeline_runner.md.")
     parser.add_argument("--profile", choices=["sample", "full"], default="sample", help="sample: fixed days 1-9 subset; full: the run of record, reusing verified outputs")
     parser.add_argument("--run-dir", type=Path, help="default: outputs/pipeline/<profile>")
     parser.add_argument("--from", dest="from_stage", metavar="STAGE", help="run this stage and every stage after it")

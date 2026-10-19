@@ -1,4 +1,4 @@
-"""Hourly event counts and model inputs for the fusion model (docs/supervised_fusion.md).
+"""Hourly event counts and model inputs for the fusion model (docs/evaluation/supervised_fusion.md).
 
 Shared by the validation and final-test scripts and by the end-to-end pipeline,
 so every path computes the fusion inputs the same way. ``is_machine`` is the

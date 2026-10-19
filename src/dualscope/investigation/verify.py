@@ -7,7 +7,7 @@ Techniques get one of three statuses:
 - **Rejected**: the ID is not an active ATT&CK technique in the pinned
   snapshot; no cited reference is an event in the package; ATT&CK lists no
   authentication-log data source for it; it is a documented false candidate
-  (docs/attack_retrieval.md); or its support rule finds no matching cited event.
+  (docs/investigation/attack_retrieval.md); or its support rule finds no matching cited event.
 - **Uncertain**: the cited events match only partly (fewer than the rule needs,
   or a weaker form of the pattern), the technique's specific variant cannot be
   seen in logon records (most sub-techniques), some citations are broken, or
@@ -103,7 +103,7 @@ SUPPORT_RULES: dict[str, SupportRule] = {
 # service, which kind of account, ...).
 SUBTECHNIQUE_CAP = UNCERTAIN
 
-# Retrieved by 6.1 but documented as wrong for logon evidence (docs/attack_retrieval.md).
+# Retrieved by 6.1 but documented as wrong for logon evidence (docs/investigation/attack_retrieval.md).
 KNOWN_FALSE = {
     "T1556.004": "Network Device Authentication is about modifying network devices; logon records cannot show it",
     "T1110.002": "Password Cracking happens offline and leaves no logon record",

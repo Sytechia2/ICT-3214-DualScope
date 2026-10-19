@@ -1,6 +1,6 @@
 # Release candidate validation (Task 8.4)
 
-This record shows that the user manual ([user_manual.md](user_manual.md)) takes a person from a fresh copy of the repository to a working dashboard. The manual was followed in order in a new clone with a new virtual environment.
+This record shows that the user manual ([user_manual.md](../user_manual.md)) takes a person from a fresh copy of the repository to a working dashboard. The manual was followed in order in a new clone with a new virtual environment.
 
 Release tag: `v1.0-rc1`, on the merge of this work into `main`.
 
@@ -33,7 +33,7 @@ Sample subset files (`data/samples/lanl_pipeline_subset/manifest.json`), all mat
 
 ## Steps and results
 
-Manual section numbers refer to [user_manual.md](user_manual.md).
+Manual section numbers refer to [user_manual.md](../user_manual.md).
 
 | # | Step (manual section) | Command | Expected | Observed | Time | Result |
 |---|---|---|---|---|---|---|

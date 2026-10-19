@@ -81,7 +81,7 @@ A stage with status `reused` used a verified output that already existed. Reuse 
 
 ## LLM calls
 
-The default investigation stage makes no model calls. `--llm` runs `scripts/run_investigations.py` for real. It needs a working `gcloud` login and sends requests to Vertex AI, so it is opt-in. See [genai_investigation.md](genai_investigation.md).
+The default investigation stage makes no model calls. `--llm` runs `scripts/run_investigations.py` for real. It needs a working `gcloud` login and sends requests to Vertex AI, so it is opt-in. See [genai_investigation.md](../investigation/genai_investigation.md).
 
 ## State and logs
 
@@ -137,4 +137,4 @@ Full profile with ingestion, features, the test package and the Gemini run reuse
 
 Day-16 reproduction: the user-hour sets and counts are equal, the 38 alerts are the same set, the largest GRU difference to the stored GPU scores is 2.86e-3 and the median is 7.7e-5.
 
-Rebuilding the reused parts is not measured here. The feature build of record took 10,674 seconds (about 3 hours) with `--workers 2`, and the sequential estimate is about 4 hours ([lanl_features.md](lanl_features.md)). The Gemini run makes one request per incident and generation mode, so about 1,000 requests for the 497 test incidents.
+Rebuilding the reused parts is not measured here. The feature build of record took 10,674 seconds (about 3 hours) with `--workers 2`, and the sequential estimate is about 4 hours ([lanl_features.md](../data/lanl_features.md)). The Gemini run makes one request per incident and generation mode, so about 1,000 requests for the 497 test incidents.

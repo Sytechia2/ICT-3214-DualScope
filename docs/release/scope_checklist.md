@@ -11,8 +11,8 @@ Status as of 2026-10-06 (ticked from the code on `main`).
 - [x] Chronological training, validation and test periods are defined.
 - [x] A short-term sequence detector is trained and evaluated.
 - [x] A long-term authentication-graph detector is trained and evaluated, including imbalanced metrics and a chronological overfitting check.
-- [x] A flat-feature Isolation Forest baseline is included ([model_comparison_matrix.md](model_comparison_matrix.md)).
-- [x] Maximum, average, weighted and temporal fusion are compared, plus supervised fusion ([model_comparison_matrix.md](model_comparison_matrix.md)).
+- [x] A flat-feature Isolation Forest baseline is included ([model_comparison_matrix.md](../evaluation/model_comparison_matrix.md)).
+- [x] Maximum, average, weighted and temporal fusion are compared, plus supervised fusion ([model_comparison_matrix.md](../evaluation/model_comparison_matrix.md)).
 - [x] Incidents retain detector score breakdowns and source evidence references.
 - [ ] ATT&CK retrieval, investigation generation and evidence verification are compared in three modes: direct, RAG and RAG with verification.
 - [ ] The dashboard supports incident navigation, detector evidence and investigation status.

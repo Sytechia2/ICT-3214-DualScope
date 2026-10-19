@@ -1,6 +1,6 @@
 """Evidence packages: what the LLM is allowed to see about one incident (Task 6.2).
 
-A package is built from the alert handoff (docs/alert_handoff.md), never from
+A package is built from the alert handoff (docs/investigation/alert_handoff.md), never from
 the raw dataset. It holds the incident's detector scores, the hourly counts,
 the graph detector's same-day view (marked as context), the behaviours the
 Task 6.1 rules found, counts over all of the incident's events, and a
