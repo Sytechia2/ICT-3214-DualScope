@@ -112,7 +112,7 @@ If the `streamlit` command is not found, the virtual environment is not active. 
 
 ### On the final-test alerts with the stored AI summaries
 
-These are the alerts of days 17 to 30 and the stored Gemini summaries. They are too large for Git, so they are kept as two zip files in the [project's Google Drive folder](https://drive.google.com/drive/folders/1uccDsuaxZahnTwdyiIGJIW2MzZ1dBQdq?usp=sharing), under `Final Model/outputs`: `handoff.zip` and `investigations.zip`. [google_drive_contents.txt](../google_drive_contents.txt) lists everything in that folder. Unzip both into the `outputs` folder of the repository, so that these paths exist:
+These are the alerts of days 17 to 30 and the stored Gemini summaries. They are too large for Git, so they are kept as two zip files in the [project's Google Drive folder](https://drive.google.com/drive/folders/1uccDsuaxZahnTwdyiIGJIW2MzZ1dBQdq?usp=sharing), under `Final Model/outputs`: `handoff.zip` and `investigations.zip`. The file `google_drive_contents.txt`, which comes with the submission, lists everything in that folder. Unzip both into the `outputs` folder of the repository, so that these paths exist:
 
 ```text
 outputs/handoff/final_test_alerts_v1/incidents.jsonl      (with alerts.parquet, events.parquet, manifest.json)

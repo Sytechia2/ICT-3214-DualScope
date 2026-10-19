@@ -68,7 +68,7 @@ src/        The dualscope Python package
 tests/      Automated tests
 ```
 
-The full LANL data, the processed data, intermediate model runs, scores and logs are too large for Git. `outputs/`, `logs/` and most of `data/` and `models/` are ignored. The larger data and results are kept in a [shared Google Drive folder](https://drive.google.com/drive/folders/1uccDsuaxZahnTwdyiIGJIW2MzZ1dBQdq?usp=sharing), listed in [google_drive_contents.txt](google_drive_contents.txt). The user manual explains when each one is needed and how to rebuild it.
+The full LANL data, the processed data, intermediate model runs, scores and logs are too large for Git. `outputs/`, `logs/` and most of `data/` and `models/` are ignored. The larger data and results are kept in a [shared Google Drive folder](https://drive.google.com/drive/folders/1uccDsuaxZahnTwdyiIGJIW2MzZ1dBQdq?usp=sharing). The file `google_drive_contents.txt`, which comes with the submission, lists each file and where it goes. The user manual explains when each one is needed and how to rebuild it.
 
 ## Limitations
 

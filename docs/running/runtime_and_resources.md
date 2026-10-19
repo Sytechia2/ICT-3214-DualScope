@@ -21,7 +21,7 @@ All times were measured on the development laptop described below unless the las
 | **LLM investigations for 497 incidents:** `--llm` | Google Cloud login with Vertex AI access | about 66 minutes with 8 workers | low | 38 MB | From the run log |
 | **Retraining the GRU** (not part of the runner) | Full feature build | about 7.5 minutes of CPU training | not recorded | small | From the training log |
 
-Which of these a reviewer can run from the submission alone: setup, smoke check, tests, sample pipeline and the dashboard on the sample run. The dashboard on the final-test package also needs two zip files from the project's Google Drive (see the manual and `google_drive_contents.txt`). The full pipeline and the LLM run need data or credentials that are not in the submission. Their stored results are included so that nothing has to be rerun to see them.
+Which of these a reviewer can run from the submission alone: setup, smoke check, tests, sample pipeline and the dashboard on the sample run. The dashboard on the final-test package also needs two zip files from the project's Google Drive (see the manual). The full pipeline and the LLM run need data or credentials that are not in the submission. Their stored results are included so that nothing has to be rerun to see them.
 
 ## Hardware and software used
 
